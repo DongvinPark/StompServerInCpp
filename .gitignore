@@ -1,0 +1,33 @@
+*.swp
+
+.idea/
+
+*.xml
+
+*.iml
+
+*.DS_STORE
+
+# window realted files
+*.exe
+*.obj
+
+# CMake
+build/
+cmake-build-debug/
+
+# CMakeBuild files - these are one time use.
+cmake-build-debug
+cmake-build-release
+cmake-build-release-visual-studio
+
+# visual studio ide meta files
+.vs
+out/
+
+# Xcode
+XcodeProject/
+.DS_Store
+
+# Visual Studio Code
+.vscode/
