@@ -51,6 +51,8 @@ add_executable(StompServerInCpp
         include/Logger.h
         src/util/Logger.cpp
         constants/Util.h
+        include/PeriodicTask.h
+        src/timer/PeriodicTask.cpp
 )
 
 # Link Boost libraries and platform-specific libraries

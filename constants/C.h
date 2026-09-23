@@ -18,6 +18,7 @@ namespace C
 
     // general constants
     constexpr char MY_NAME[] = "StompServerInCpp/1.1.1";
+    constexpr char PERIODIC_TASK[] = "PeriodicTask";
 
 }
 

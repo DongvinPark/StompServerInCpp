@@ -7,6 +7,7 @@
 #include <string>
 #include <memory>
 
+// Logger 인스턴스는 std::shared_ptr<Logger> 타입으로 만들어서 사용한다.
 class Logger {
 public:
     static std::shared_ptr<Logger> getLogger(const std::string& className);
