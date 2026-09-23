@@ -47,6 +47,10 @@ include_directories(${Boost_INCLUDE_DIRS} src)
 # add_executable 안에는 오직 1 개의 소스 파일만 주석 해제 돼 있어야 한다.
 add_executable(StompServerInCpp
         src/main.cpp
+        constants/C.h
+        include/Logger.h
+        src/util/Logger.cpp
+        constants/Util.h
 )
 
 # Link Boost libraries and platform-specific libraries
