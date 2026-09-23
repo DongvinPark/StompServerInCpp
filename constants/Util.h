@@ -80,10 +80,6 @@ namespace Util {
 		return C::INVALID;
 	}
 
-	inline bool isVideo(int streamId) {
-		return streamId == C::VIDEO_ID;
-	}
-
 	inline int64_t usToMs(int64_t timeUs) {
 		return timeUs / 1000;
 	}
@@ -177,15 +173,6 @@ namespace Util {
 
 	inline int getRtpPacketLength(const unsigned char high, const unsigned char low) {
 		return (high & 0xFF) << 8 | low & 0xFF;
-	}
-
-	inline int64_t getFileSize(const std::filesystem::path& filePath) {
-		// open in binary mode and seek to the end
-		std::ifstream file(filePath, std::ios::binary | std::ios::ate);
-		if (!file) {
-			throw std::runtime_error("Failed to open file: " + filePath.filename().string());
-		}
-		return file.tellg(); // current position == file size
 	}
 
 	inline int32_t convertToInt32(const std::vector<unsigned char>& metaLenBuf) {

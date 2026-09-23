@@ -20,6 +20,8 @@ namespace C
     constexpr char MY_NAME[] = "StompServerInCpp/1.1.1";
     constexpr char PERIODIC_TASK[] = "PeriodicTask";
 
+    constexpr int INVALID = -1;
+
 }
 
 #endif //C_H
