@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.16)
 # Project name and version
 project(StompServerInCpp VERSION 1.0)
 
-# Set C++ standard to 14
-set(CMAKE_CXX_STANDARD 14)
+# Set C++ standard to 17 : boost::redis 를 써야 하기 때문에 C++17 이상으로 설정해야 한다.
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -18,18 +18,26 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     # Set toolchain for vcpkg (Windows only)
     set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
 
-    # Find Boost using vcpkg
+    # Find Boost and OpenSSL(for redis)
     find_package(Boost REQUIRED COMPONENTS system)
+    find_package(OpenSSL REQUIRED)
 
     # Additional libraries required on Windows
-    set(PLATFORM_LIBS ws2_32)
+    set(PLATFORM_LIBS
+            ws2_32
+            OpenSSL::SSL
+            OpenSSL::Crypto
+    )
 
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin") # M chip Mac
     # Find Boost using Homebrew (macOS only)
     find_package(Boost REQUIRED)
+    find_package(OpenSSL REQUIRED) # for boost::redis
 
-    # No additional libraries required for macOS
-    set(PLATFORM_LIBS "")
+    set(PLATFORM_LIBS
+            OpenSSL::SSL
+            OpenSSL::Crypto
+    )
 
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Find Boost
@@ -37,6 +45,14 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 
     # Link pthread library for Linux
     set(PLATFORM_LIBS pthread)
+    find_package(OpenSSL REQUIRED)
+
+    set(PLATFORM_LIBS
+            pthread
+            OpenSSL::SSL
+            OpenSSL::Crypto
+    )
+
 endif()
 
 # Include directories
