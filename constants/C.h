@@ -14,13 +14,14 @@ namespace C
     constexpr char MAIN[] = "main";
 
     // boost::asio::io_context thread pool cnt
-    constexpr int THREAD_CNT_PER_WORKER_IO_CONTEXT = 3;
+    constexpr int THREAD_CNT_PER_WORKER_IO_CONTEXT = 2;
 
     // STOMP server urls
 
     // redis conn
     constexpr char REDIS_HOST_IP[] = "127.0.0.1";
     constexpr char REDIS_PORT[] = "6379";
+    constexpr char REDIS_PUB_SUB_CHANNEL[] = "chat";
 
     // class names
     constexpr char MY_NAME[] = "StompServerInCpp";

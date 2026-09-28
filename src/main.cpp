@@ -5,7 +5,7 @@
 #include "../include/Logger.h"
 #include "../include/PeriodicTask.h"
 #include "../constants/Util.h"
-#include "../include/RedisService.h"
+#include "../src/redis/RedisService.h"
 
 
 /*
@@ -32,6 +32,7 @@ int main() {
     auto workGuard = boost::asio::make_work_guard(main_io_context);
     std::vector<std::thread> threadVec;
     int cpuCoreCnt = static_cast<int>(std::thread::hardware_concurrency());
+    logger->warning("CPU Core Cnt : " + std::to_string(cpuCoreCnt));
     for (auto i = 0; i < cpuCoreCnt; ++i) {
         threadVec.emplace_back(
             [&main_io_context]() {
@@ -69,6 +70,11 @@ int main() {
     std::promise<void> shutdownPromise;
     auto shutdownFuture = shutdownPromise.get_future();
 
+    // redis test 용 객체 초기화.
+    std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>(
+        main_io_context, workerIoContextPool
+    );
+
     // PeriodicTask 실행 테스트.
     auto test_strand = boost::asio::make_strand(main_io_context);
     PeriodicTask periodic_task(*workerIoContextPool[0], test_strand, std::chrono::milliseconds(1000));
@@ -81,11 +87,10 @@ int main() {
     periodic_task.stop();
 
     // redis conn 테스트.
-    RedisService redis_service(main_io_context, workerIoContextPool);
-    redis_service.redisPingPongTest();
-
-    RedisService redis_service_2(main_io_context, workerIoContextPool);
-    redis_service_2.redisPingPongTest();
+    redis_service_ptr->redisPingPongTest();
+    //redis_service_ptr->startPubSubListening();
+    /*RedisService redis_service(main_io_context, workerIoContextPool);
+    redis_service.redisPingPongTest();*/
 
 
     // 프로그램 정상 종료 준비
@@ -122,6 +127,12 @@ int main() {
 
     // Wait for shutdown to complete
     shutdownFuture.wait();
+
+    // Shutdown RedisMessageSubscriber
+    // TODO : implement later - 나중에 RedisService 셧다운 코드 여기에 넣으라.
+
+    // Shutdown Server.
+    // TODO : implement later - 나중에 서버 셧다운 코드 여기에 넣으라.
 
     // do cleaning before shutting down.
     for (auto& thread : threadVec) {
