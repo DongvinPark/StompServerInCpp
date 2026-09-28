@@ -16,11 +16,19 @@ namespace C
     // boost::asio::io_context thread pool cnt
     constexpr int THREAD_CNT_PER_WORKER_IO_CONTEXT = 3;
 
-    // general constants
-    constexpr char MY_NAME[] = "StompServerInCpp/1.1.1";
-    constexpr char PERIODIC_TASK[] = "PeriodicTask";
+    // STOMP server urls
 
+    // class names
+    constexpr char MY_NAME[] = "StompServerInCpp";
+    constexpr char PERIODIC_TASK[] = "PeriodicTask";
+    constexpr char REDIS_MSG_SUBSCRIBER[] = "RedisMessageSubscriber";
+    constexpr char SESSION[] = "Session";
+    constexpr char STOMP_HANDLER[] = "StompHandler";
+
+    // general constants
+    constexpr char EMPTY_STR[] = "";
     constexpr int INVALID = -1;
+    constexpr int UNSET = -1;
 
 }
 

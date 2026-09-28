@@ -29,25 +29,25 @@ int main() {
     logger->warning("=================================================================");
 
     // make worker thread pool for main boost.asio io_context
-    boost::asio::io_context io_context;
-    auto workGuard = boost::asio::make_work_guard(io_context);
+    boost::asio::io_context main_io_context;
+    auto workGuard = boost::asio::make_work_guard(main_io_context);
     std::vector<std::thread> threadVec;
     int cpuCoreCnt = static_cast<int>(std::thread::hardware_concurrency());
     for (auto i = 0; i < cpuCoreCnt; ++i) {
         threadVec.emplace_back(
-            [&io_context]() {
+            [&main_io_context]() {
                 Util::set_thread_priority();
-                io_context.run();
+                main_io_context.run();
             }
         );
     }
 
     // make threads pool for worker io_context pool
-    std::vector<std::shared_ptr<boost::asio::io_context>> ioContextPool;
+    std::vector<std::shared_ptr<boost::asio::io_context>> workerIoContextPool;
     std::vector<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> workGuardVec;
     for (int i = 0; i < cpuCoreCnt; ++i) {
         auto workerIoContextPtr = std::make_shared<boost::asio::io_context>();
-        ioContextPool.emplace_back(workerIoContextPtr);
+        workerIoContextPool.emplace_back(workerIoContextPtr);
 
         // create a work guard to prevent io_context from stopping
         workGuardVec.emplace_back(boost::asio::make_work_guard(*workerIoContextPtr));
@@ -71,8 +71,8 @@ int main() {
     auto shutdownFuture = shutdownPromise.get_future();
 
     // PeriodicTask 실행 테스트.
-    auto test_strand = boost::asio::make_strand(io_context);
-    PeriodicTask periodic_task(*ioContextPool[0], test_strand, std::chrono::milliseconds(1000));
+    auto test_strand = boost::asio::make_strand(main_io_context);
+    PeriodicTask periodic_task(*workerIoContextPool[0], test_strand, std::chrono::milliseconds(1000));
     periodic_task.setTask(
       [](){
         std::cout << "Run PeriodicTask!\n";
@@ -82,7 +82,7 @@ int main() {
     periodic_task.stop();
 
     // redis conn 테스트.
-    boost::redis::connection conn(io_context);
+    boost::redis::connection conn(main_io_context);
     boost::redis::config cfg;
     cfg.addr.host = "127.0.0.1";
     cfg.addr.port = "6379";
@@ -111,7 +111,7 @@ int main() {
 
     // 프로그램 정상 종료 준비
     // handle exit signal using boost::asio::signal_set
-    boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
+    boost::asio::signal_set signals(main_io_context, SIGINT, SIGTERM);
     signals.async_wait([&](const boost::system::error_code& ec, int signal) {
       try {
           if (!ec) {
@@ -122,13 +122,13 @@ int main() {
                   workGuardVec[i].reset();
               }
 
-              if (!io_context.stopped()) {
-                  io_context.stop();
+              if (!main_io_context.stopped()) {
+                  main_io_context.stop();
               }
 
               for (int i = 0; i < cpuCoreCnt; ++i){
-                  if (!ioContextPool[i]->stopped()){
-                      ioContextPool[i]->stop();
+                  if (!workerIoContextPool[i]->stopped()){
+                      workerIoContextPool[i]->stop();
                   }
               }
 

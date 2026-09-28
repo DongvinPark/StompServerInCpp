@@ -70,6 +70,11 @@ add_executable(StompServerInCpp
         include/PeriodicTask.h
         src/timer/PeriodicTask.cpp
         include/RedisMessageSubscriber.h
+        include/StompHandler.h
+        include/Buffer.h
+        include/Session.h
+        include/Server.h
+        src/util/Buffer.cpp
 )
 
 # Link Boost libraries and platform-specific libraries
