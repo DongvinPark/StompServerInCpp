@@ -1,12 +1,11 @@
 #include <iostream>
 #include <boost/asio.hpp>
-#include <boost/redis.hpp>
-#include <boost/redis/src.hpp>
 
 #include "../constants/C.h"
 #include "../include/Logger.h"
 #include "../include/PeriodicTask.h"
 #include "../constants/Util.h"
+#include "../include/RedisService.h"
 
 
 /*
@@ -82,31 +81,11 @@ int main() {
     periodic_task.stop();
 
     // redis conn 테스트.
-    boost::redis::connection conn(main_io_context);
-    boost::redis::config cfg;
-    cfg.addr.host = "127.0.0.1";
-    cfg.addr.port = "6379";
+    RedisService redis_service(main_io_context, workerIoContextPool);
+    redis_service.redisPingPongTest();
 
-    // Start Redis connection(in detach mode).
-    conn.async_run( cfg, boost::asio::detached);
-
-    // Create Redis req/res
-    boost::redis::request redisReq;
-    redisReq.push("PING");
-    boost::redis::response<std::string> redisRes;
-
-    // exec redis cmd in sync mode
-    conn.async_exec(
-        redisReq,
-        redisRes,
-        [&redisRes](const boost::system::error_code& ec, std::size_t) {
-            if (ec) {
-                std::cerr << "Redis PING failed: " << ec.message() << "\n";
-                return;
-            }
-            std::cout << "PING: " << std::get<0>(redisRes).value() << "\n";
-        }
-    );
+    RedisService redis_service_2(main_io_context, workerIoContextPool);
+    redis_service_2.redisPingPongTest();
 
 
     // 프로그램 정상 종료 준비

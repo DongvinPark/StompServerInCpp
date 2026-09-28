@@ -18,6 +18,10 @@ namespace C
 
     // STOMP server urls
 
+    // redis conn
+    constexpr char REDIS_HOST_IP[] = "127.0.0.1";
+    constexpr char REDIS_PORT[] = "6379";
+
     // class names
     constexpr char MY_NAME[] = "StompServerInCpp";
     constexpr char PERIODIC_TASK[] = "PeriodicTask";
