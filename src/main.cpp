@@ -8,6 +8,19 @@
 #include "../include/PeriodicTask.h"
 #include "../constants/Util.h"
 
+
+/*
+구현 순서.
+
+1. 레디스 펍/섭 리스너 만들어서 '리스닝' 해보고 출력하기
+2. 1 명의 클라이언트에게 웹소켓 연결 및 STOMP 프로토콜 제공 테스트(테스트용 클라이언트들과 호환 되게끔)
+3. Stomp server 내에서 세션 관리 방법 정하기
+3. 다수의 클라이언트에게 서버가 응답 전송하는 방법들 테스트
+    single threaded serial : 싱글 스레드로 응답 전송
+    multi threaded serial : 멀티 스레드로 전송 but, 개별 스레드는 serial
+    io_context base async : 모든 네트워킹 Tx/Rx 를 boost asio io_context에게 위임
+ */
+
 int main() {
 
     const std::shared_ptr<Logger> logger = Logger::getLogger(C::MAIN);
