@@ -35,7 +35,7 @@ public:
     boost::redis::config cfg;
     cfg.addr.host = C::REDIS_HOST_IP;
     cfg.addr.port = C::REDIS_PORT;
-    redis_conn.async_run( cfg, boost::asio::detached);
+    redis_conn.async_run( cfg, {}, boost::asio::detached);
   };
   ~RedisService(){
     redis_conn.cancel();
