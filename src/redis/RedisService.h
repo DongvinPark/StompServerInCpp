@@ -63,15 +63,6 @@ public:
 
   void verifyRedisConnection()
   {
-    // 이 함수의 호출자가 호출을 마치고나면 이 안에서 만들어진 지역변수들은 원래는 소멸하는게 맞다.
-    // 그런데, io_context 에게 지역 변수들을 참조해야 하는 태스크를 전달해야 하는 경우가 있다.
-    // 예를 들면, redis_conn.async_exec() 같은 것들이다.
-    // io_context가 테스크를 실행하기도 전에 지역변수들(redis req/res)이 소멸해버리면 잘못된 포인터 access
-    // 가 발생하면서 SIGABRT(macOS), 프로그램 종료(Windows) 가 발생한다.
-    // 따라서 io_context 가 참조할 수 있는 포인터들(self, shared_ptr 들)을 만들어서 task lambda 한테
-    // 전달해줘야 한다.
-    // unique_ptr을 써도 되지만, std::move()를 계속 호출해줘야 해서 번거롭다.
-
     // 이걸로 RedisSession class 멤버필드에 접근 가능.
     // shared_from_this() 롤 사용하기 위해서는 RedisService.h 자체가 shared_ptr로 초기화 돼야 한다.
     auto self = shared_from_this();
@@ -79,28 +70,35 @@ public:
     auto resPtr = std::make_shared<boost::redis::response<std::string>>();
     reqPtr->push("PING");
 
-    Util::delayedExecutorAsyncByIoContext(
-      *worker_io_context_pool[1], 0, [self, reqPtr, resPtr]()
+    // exec redis cmd in async mode
+    std::cout << "Redis Ping Pong Test Start! \n";
+    self->redis_conn.async_exec(
+      *reqPtr,
+      *resPtr,
+      [self, resPtr](const boost::system::error_code& ec, std::size_t)
       {
-        std::cout << "Redis Ping Pong Test Start! \n";
-
-        // exec redis cmd in async mode
-        self->redis_conn.async_exec(
-          *reqPtr,
-          *resPtr,
-          [self, resPtr](const boost::system::error_code& ec, std::size_t)
-          {
-            if (ec)
-            {
-              std::cerr << "Redis PING failed: " << ec.message() << "\n";
-              return;
-            }
-            self->is_ready.store(true); // ping pong test 결과 기록
-            std::cout << "PING: " << std::get<0>(*resPtr).value() << "\n";
-          }
-        );
+        if (ec)
+        {
+          std::cerr << "Redis PING failed: " << ec.message() << "\n";
+          return;
+        }
+        self->is_ready.store(true); // ping pong test 결과 기록
+        std::cout << "PING: " << std::get<0>(*resPtr).value() << "\n";
       }
     );
+
+    // io_context 를 써서 아래와 같은 '스레드 고의 정지' 같은 '멋지지 않은 방법'으로 처리해보려 했지만
+    // 결국 실패하고, 아래와 같은 '안 멋지지만 확실히 작동하는 방법'으로 회귀했다.
+    // io_context 를 써서 'fancy'하게 작동시키는 것은 boost 1.9x 버전의 Mac 에서는 잘 작동했지만,
+    // boost 1.86 버전인 윈도우 11 에서는 알 수 없는 에러로 실패한 것이다.
+    // 결국 '코드를 복잡하게 만드는 것' 보다는 '못생겼지만 여러 운영 체제에서 작동하는' 코드로 회귀했다;;
+    // 아무튼 아래의 코드가 있어야 Windows 환경에서는 redis_conn.async_exec(...) 가 정확하게 작동한다.
+    // 이 함수가 끝나는 것을 고의적으로 지연시켜서 async_exec()가 지역 변수들을 참조해서 일을 처리할 때
+    // bad memory access 가 나지 않게 해주기 때문이다.
+    // TODO : 때로는 '멋지고 근사한 코드' 보다는 '지루하고 뻔하지만 작동하는게 보장되는 코드'가 가치 있다.
+    // TODO : 특히 이번 프로젝트 처럼 Boost Lib 같은 외부 라이브러리에 의존해야 하는데
+    // TODO : 해당 라이브러리의 버전이 다르고, 실행 운영체제도 여러 가지인 경우엔 특히 그렇다.
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
   }
 
 
@@ -185,7 +183,7 @@ private:
   // used strand to reduce cache miss
   boost::asio::strand<boost::asio::io_context::executor_type> strand;
 
-  std::atomic<bool> is_ready;
+  std::atomic<bool> is_ready{false};
   bool is_shutdown = false;
 
   // TODO : 나중에 여기에는 각종 msg_tx 용 객체들이 정의돼야 한다.

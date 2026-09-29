@@ -111,8 +111,8 @@ int main()
     }
   }
 
+  // Ping 테스트로써 레디스 연결 성공 여부를 판단한다.
   redis_service_ptr->verifyRedisConnection();
-
   int test_wait_cnt = 0;
   while (true)
   {
@@ -131,7 +131,7 @@ int main()
   }
 
   // Redis Pub/Sub channel 리스닝 테스트 시작 : TODO : implement later - 아직 정상 작동하지는 않는다
-  redis_service_ptr->startPubSubListening();
+  // redis_service_ptr->startPubSubListening();
 
   // 프로그램 정상 종료 준비
   // handle exit signal using boost::asio::signal_set
