@@ -111,12 +111,12 @@ public:
 
   void startPubSubListening()
   {
-    boost::redis::request req;
-    req.push("SUBSCRIBE", C::REDIS_PUB_SUB_CHANNEL);
-    boost::redis::response<std::string> res;
+    auto req_ptr = std::make_shared<boost::redis::request>();
+    req_ptr->push("SUBSCRIBE", C::REDIS_PUB_SUB_CHANNEL);
+    auto res_ptr = std::make_shared<boost::redis::response<std::string>>();
 
     redis_conn.async_exec(
-      req, res, [this](const boost::system::error_code& ec, std::size_t)
+      *req_ptr, *res_ptr, [this](const boost::system::error_code& ec, std::size_t)
       {
         if (ec)
         {
@@ -140,17 +140,21 @@ public:
 private:
   void receiveRedisMessage()
   {
-    /* 아 코드는 윈도우 환경(boost 1.86)에서는 빌드 됐지만, Mac 환경(boost 1.9x)에서는 빌드 되지 않았다.
+    /* 이 코드는 윈도우 환경(boost 1.86)에서는 빌드 됐지만, Mac 환경(boost 1.9x)에서는 빌드 되지 않았다.
      * 아무래도 테스트가 더 필요한 듯 하다.
-     auto response = std::make_shared<
-      boost::redis::generic_response
-    >();
+     * 만약 라이브러리 버전에 따라서 서로 완전 다른 함수 시그니처를 가지고 있어서 동일한 코드로는 전혀 대응할 수 없을 때는
+     * 버전 또는 OS에 따라서 별개의 소스코드로 컴파일되게 만드는 등의 작업이 필요할 수 있다.
+     */
 
+    // 이 버전은 일단 M1 Mac에서 컴파일은 되지만, 정상 작동하지는 않는다.
+    auto response_ptr = std::make_shared<boost::redis::generic_response>();
     redis_conn.async_receive(
-      *response,
-      [this, response](const boost::system::error_code& ec, std::size_t){
-        if (ec) {
-          if (ec == boost::asio::error::operation_aborted){
+      [this, response_ptr](const boost::system::error_code& ec, std::size_t)
+      {
+        if (ec)
+        {
+          if (ec == boost::asio::error::operation_aborted)
+          {
             return;
           }
 
@@ -159,16 +163,18 @@ private:
         }
 
         // do work with received msg
-        std::cout << response->value()[0].value[0] << "\n";
+        std::cout << "Received Redis message! \n";
+        std::cout << response_ptr->value()[0].value[0] << "\n";
 
         // TODO : implement later - 나중에 여기에 '팬들한테 답장 보내기' 기능 넣어야 한다.
 
         // wait for the next msg - if alive
-        if (!is_shutdown){
+        if (!is_shutdown)
+        {
           receiveRedisMessage();
         }
-      }//lambda
-    );//async_receive()*/
+      } //lambda
+    ); //async_receive()
   }
 
   std::shared_ptr<Logger> logger;
