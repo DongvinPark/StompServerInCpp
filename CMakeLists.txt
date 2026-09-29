@@ -70,10 +70,10 @@ add_executable(StompServerInCpp
         include/PeriodicTask.h
         src/timer/PeriodicTask.cpp
         src/redis/RedisService.h
-        include/StompHandler.h
+        src/service/StompHandler.h
         include/Buffer.h
-        include/Session.h
-        include/Server.h
+        src/service/Session.h
+        src/server/Server.h
         src/util/Buffer.cpp
 )
 

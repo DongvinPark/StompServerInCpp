@@ -131,7 +131,7 @@ public:
   void shutdown()
   {
     is_ready.store(false);
-    is_shutdown = true;
+    is_shutdown.store(true);
     redis_conn.cancel();
   }
 
@@ -167,7 +167,7 @@ private:
         // TODO : implement later - 나중에 여기에 '팬들한테 답장 보내기' 기능 넣어야 한다.
 
         // wait for the next msg - if alive
-        if (!is_shutdown)
+        if (!is_shutdown.load())
         {
           receiveRedisMessage();
         }
@@ -184,7 +184,7 @@ private:
   boost::asio::strand<boost::asio::io_context::executor_type> strand;
 
   std::atomic<bool> is_ready{false};
-  bool is_shutdown = false;
+  std::atomic<bool> is_shutdown{false};
 
   // TODO : 나중에 여기에는 각종 msg_tx 용 객체들이 정의돼야 한다.
   //  server socket 을 돌리는 Server 객체는 Session 을 만들 뿐, 응답을 전송하지는 않기 때문이다.
