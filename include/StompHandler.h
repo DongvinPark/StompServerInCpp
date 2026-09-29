@@ -12,11 +12,12 @@
 
 class Session;
 
-class StompHandler {
+class StompHandler
+{
 public:
   explicit StompHandler(
     std::weak_ptr<Session> input_session_ptr
-    );
+  );
   ~StompHandler();
 
   void run(Buffer& buf);

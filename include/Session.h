@@ -12,11 +12,12 @@
 
 class Server;
 
-class Session : public std::enable_shared_from_this<Session> {
+class Session : public std::enable_shared_from_this<Session>
+{
 public:
   explicit Session(
 
-    );
+  );
   ~Session();
 
   // Rule of five. Session object is not allowed to copy or move.

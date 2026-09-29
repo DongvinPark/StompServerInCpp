@@ -10,7 +10,8 @@
 #include <functional>
 #include "../constants/C.h"
 
-class Buffer {
+class Buffer
+{
 public:
   // used unsigned char for buf element type for ease of initialization of buf
   // when reading raw binary data from ifstream

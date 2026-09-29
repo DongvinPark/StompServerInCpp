@@ -17,14 +17,15 @@
 class Session;
 class ResponseSender;
 
-class Server {
+class Server
+{
 public:
   explicit Server(
     boost::asio::io_context& input_io_context,
     std::vector<std::shared_ptr<boost::asio::io_context>>& input_worker_io_context_pool,
     ResponseSender& input_response_sender,
     std::chrono::milliseconds input_periodic_task_millis
-    );
+  );
   ~Server();
 
   void start();

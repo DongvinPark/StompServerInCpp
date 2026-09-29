@@ -10,42 +10,43 @@
 
 #include "../include/Logger.h"
 
-class PeriodicTask {
+class PeriodicTask
+{
 public:
-    using TaskCallback = std::function<void()>;
+  using TaskCallback = std::function<void()>;
 
-    // constructor with no task
-    explicit PeriodicTask(
-        boost::asio::io_context& io_context,
-        boost::asio::strand<boost::asio::io_context::executor_type> inputStrand,
-        std::chrono::milliseconds inputInterval
-    );
+  // constructor with no task
+  explicit PeriodicTask(
+    boost::asio::io_context& io_context,
+    boost::asio::strand<boost::asio::io_context::executor_type> inputStrand,
+    std::chrono::milliseconds inputInterval
+  );
 
-    // constructor with task and interval
-    explicit PeriodicTask(
-        boost::asio::io_context& io_context,
-        boost::asio::strand<boost::asio::io_context::executor_type> inputStrand,
-        std::chrono::milliseconds inputInterval,
-        TaskCallback inputTask
-    );
+  // constructor with task and interval
+  explicit PeriodicTask(
+    boost::asio::io_context& io_context,
+    boost::asio::strand<boost::asio::io_context::executor_type> inputStrand,
+    std::chrono::milliseconds inputInterval,
+    TaskCallback inputTask
+  );
 
-    ~PeriodicTask();
+  ~PeriodicTask();
 
-    void setTask(TaskCallback inputTask);
-    void setInterval(std::chrono::milliseconds inputInterval);
-    void start();
-    void stop();
+  void setTask(TaskCallback inputTask);
+  void setInterval(std::chrono::milliseconds inputInterval);
+  void start();
+  void stop();
 
 private:
-    void scheduleTask();
+  void scheduleTask();
 
-    std::shared_ptr<Logger> logger;
-    boost::asio::strand<boost::asio::io_context::executor_type> strand;
-    boost::asio::steady_timer timer;
-    std::chrono::milliseconds interval;
-    TaskCallback task;
-    bool running;
-    bool isTaskSet;
+  std::shared_ptr<Logger> logger;
+  boost::asio::strand<boost::asio::io_context::executor_type> strand;
+  boost::asio::steady_timer timer;
+  std::chrono::milliseconds interval;
+  TaskCallback task;
+  bool running;
+  bool isTaskSet;
 };
 
 #endif //PERIODICTASK_H
