@@ -22,7 +22,6 @@ class Server
 public:
   explicit Server(
     boost::asio::io_context& input_io_context,
-    std::vector<std::shared_ptr<boost::asio::io_context>>& input_worker_io_context_pool,
     ResponseSender& input_response_sender,
     std::chrono::milliseconds input_periodic_task_millis
   );
@@ -40,7 +39,6 @@ private:
 
   std::shared_ptr<Logger> logger;
   boost::asio::io_context& io_context;
-  std::vector<std::shared_ptr<boost::asio::io_context>>& worker_io_context_pool;
   ResponseSender& response_sender;
 
   // TODO : 만들어진(==live) session 들을 어떻게 저장하고 있을 것인가?

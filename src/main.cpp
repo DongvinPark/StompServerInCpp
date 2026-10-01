@@ -35,41 +35,21 @@ int main()
   logger->warning("CPU Core Cnt : " + std::to_string(cpuCoreCnt));
   for (auto i = 0; i < cpuCoreCnt; ++i)
   {
-    threadVec.emplace_back(
-      [&main_io_context]()
-      {
-        Util::set_thread_priority();
-        main_io_context.run();
-      }
-    );
-  }
-
-  // make threads pool for worker io_context pool
-  std::vector<std::shared_ptr<boost::asio::io_context>> workerIoContextPool;
-  std::vector<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>
-    workGuardVec;
-  for (int i = 0; i < cpuCoreCnt; ++i)
-  {
-    auto workerIoContextPtr = std::make_shared<boost::asio::io_context>();
-    workerIoContextPool.emplace_back(workerIoContextPtr);
-
-    // create a work guard to prevent io_context from stopping
-    workGuardVec.emplace_back(boost::asio::make_work_guard(*workerIoContextPtr));
-
-    // create worker threads for this io_context
-    for (int j = 0; j < C::THREAD_CNT_PER_WORKER_IO_CONTEXT; ++j)
+    for (auto j = 0; j < C::THREAD_CNT_PER_IO_CONTEXT; ++j)
     {
-      threadVec.emplace_back([workerIoContextPtr]()
-      {
-        Util::set_thread_priority();
-        workerIoContextPtr->run();
-      });
+      threadVec.emplace_back(
+        [&main_io_context]()
+        {
+          Util::set_thread_priority();
+          main_io_context.run();
+        }
+      );
     }
   }
 
   logger->warning(
     "Made io_cotext.run() worker thread pool with thread cnt: "
-    + std::to_string(cpuCoreCnt + (cpuCoreCnt * C::THREAD_CNT_PER_WORKER_IO_CONTEXT))
+    + std::to_string(cpuCoreCnt * C::THREAD_CNT_PER_IO_CONTEXT)
   );
 
   // used std::promise to synchronize the shutdown process
@@ -79,7 +59,7 @@ int main()
 
   // PeriodicTask 실행 테스트.
   auto test_strand = boost::asio::make_strand(main_io_context);
-  PeriodicTask periodic_task(*workerIoContextPool[0], test_strand, std::chrono::milliseconds(1000));
+  PeriodicTask periodic_task(main_io_context, test_strand, std::chrono::milliseconds(1000));
   periodic_task.setTask(
     []()
     {
@@ -90,9 +70,7 @@ int main()
   periodic_task.stop();
 
   // redis conn 테스트.
-  std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>(
-    main_io_context, workerIoContextPool
-  );
+  std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>(main_io_context);
   redis_service_ptr->init();
 
   // 5 초간 대기 후 Ping Pong 테스트 시작.
@@ -103,7 +81,7 @@ int main()
     logger->info3(
       "Waiting for redis connection..." +
       std::to_string(C::REDIS_CONN_WAIT_TIMEOUT_SECONDS - redis_init_wait_cnt)
-      );
+    );
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     if (redis_init_wait_cnt >= C::REDIS_CONN_WAIT_TIMEOUT_SECONDS)
     {
@@ -145,22 +123,9 @@ int main()
         std::cout << "\n\t>>> Received signal: " << signal << ". Stopping server...\n";
         workGuard.reset();
 
-        for (int i = 0; i < cpuCoreCnt; ++i)
-        {
-          workGuardVec[i].reset();
-        }
-
         if (!main_io_context.stopped())
         {
           main_io_context.stop();
-        }
-
-        for (int i = 0; i < cpuCoreCnt; ++i)
-        {
-          if (!workerIoContextPool[i]->stopped())
-          {
-            workerIoContextPool[i]->stop();
-          }
         }
 
         std::cout << "\t>>> all io_context stopped.\n";
@@ -177,8 +142,8 @@ int main()
   // Wait for shutdown to complete
   shutdownFuture.wait();
 
-  // Shutdown RedisMessageSubscriber
-  // TODO : implement later - 나중에 RedisService 셧다운 코드 여기에 넣으라.
+  // Shutdown RedisService
+  redis_service_ptr->shutdown();
 
   // Shutdown Server.
   // TODO : implement later - 나중에 서버 셧다운 코드 여기에 넣으라.
@@ -201,4 +166,4 @@ int main()
   logger->warning("Dongvin, C++ STOMP Server SHUTS DOWN gracefully.");
   logger->warning("=================================================================");
   return 0;
-}//main
+} //main

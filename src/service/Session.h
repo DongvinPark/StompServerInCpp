@@ -29,7 +29,6 @@ public:
 private:
   std::shared_ptr<Logger> logger;
   boost::asio::io_context& io_context;
-  std::shared_ptr<boost::asio::io_context> worker_io_context_ptr;
   Server& parent_server;
 
   // TODO : 웹소켓 관련 필드를 추가해야 한다.

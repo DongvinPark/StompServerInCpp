@@ -14,7 +14,7 @@ namespace C
     constexpr char MAIN[] = "main";
 
     // boost::asio::io_context thread pool cnt
-    constexpr int THREAD_CNT_PER_WORKER_IO_CONTEXT = 2;
+    constexpr int THREAD_CNT_PER_IO_CONTEXT = 2;
 
     // STOMP server urls
 

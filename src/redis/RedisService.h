@@ -24,13 +24,11 @@ class RedisService : public std::enable_shared_from_this<RedisService>
 {
 public:
   explicit RedisService(
-    boost::asio::io_context& input_io_context,
-    std::vector<std::shared_ptr<boost::asio::io_context>>& input_worker_io_context_pool
+    boost::asio::io_context& input_io_context
     // TODO : 나중에 여기에는 각종 msg_tx 용 객체들이 정의돼야 한다.
     //  server socket 을 돌리는 Server 객체는 Session 을 만들 뿐, 응답을 전송하지는 않기 때문이다.
   ) : logger(Logger::getLogger(C::REDIS_MSG_SUBSCRIBER)),
       io_context(input_io_context),
-      worker_io_context_pool(input_worker_io_context_pool),
       redis_conn(io_context),
       strand(boost::asio::make_strand(io_context))
   {
@@ -177,7 +175,6 @@ private:
 
   std::shared_ptr<Logger> logger;
   boost::asio::io_context& io_context;
-  std::vector<std::shared_ptr<boost::asio::io_context>>& worker_io_context_pool;
   boost::redis::connection redis_conn;
 
   // used strand to reduce cache miss
