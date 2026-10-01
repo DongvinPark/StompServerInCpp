@@ -82,7 +82,7 @@ public:
     self->redis_conn.async_exec(
       *reqPtr,
       *resPtr,
-      [self, resPtr](const boost::system::error_code& ec, std::size_t)
+      [self, resPtr, reqPtr](const boost::system::error_code& ec, std::size_t)
       {
         if (ec)
         {
@@ -105,7 +105,10 @@ public:
     // TODO : 때로는 '우아하고 멋져보이는 코드' 보다는 '지루하고 뻔하지만 작동하는게 보장되는 코드'가 가치 있다.
     // TODO : 이번 프로젝트 처럼 Boost Lib 같은 외부 라이브러리에 의존해야 하면서
     // TODO : 해당 라이브러리의 버전이 실행하는 운영체제 마다 다른 경우엔 특히 그렇다.
-    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    // TODO : 아래의 코드를 없애도 잘될 때도 있지만, 후속 동작(pub/sub channel listener)이 작동을
+    // TODO : 했다가, 안했다가 하면서 불완전한 동작을 보인다. 이상한 코드로 보이더라도 없애지 말길 바란다.
+    // TODO : 때로는 '상식'과 '테스트 결과'가 다르기도 한다.
+    std::this_thread::sleep_for(std::chrono::seconds(C::REDIS_CONN_WAIT_TIMEOUT_SECONDS));
   }
 
 
@@ -113,9 +116,8 @@ public:
   {
     auto self = shared_from_this();
     auto reqPtr = std::make_shared<boost::redis::request>();
+    reqPtr->push("PUBLISH", C::REDIS_PUB_SUB_CHANNEL, msg);
     auto resPtr = std::make_shared<boost::redis::response<std::string>>();
-    const std::string cmd = "PUBLISH " + std::string(C::REDIS_PUB_SUB_CHANNEL) + "\"" + msg + "\"";
-    reqPtr->push(cmd);
 
     // exec redis cmd in async mode
     self->redis_conn.async_exec(
@@ -128,7 +130,7 @@ public:
           std::cerr << "Redis PUBLISH failed: " << ec.message() << "\n";
           return;
         }
-        std::cout << "Pub to Redis : " << msg << "\n";
+        std::cout << "Msg published by this server : " << msg << "\n";
       }
     );
   }
@@ -173,7 +175,7 @@ private:
     // 채널(또는 채널들) 구독이 완료됐다. 채널에 푸시된 메시지들은 resp에 쌓인다.
     // 커넥션이 네트워크 에러 떠서 레디스에 다시 연결할 때, 채널들을 자동으로 다시 구독한다.
     // 그러기 위해서는 request::subscribe()를 호출해야 한다.
-    while (conn->will_reconnect())
+    while (conn->will_reconnect() && !is_shutdown.load())
     {
       // 메시지 도착을 기다린다.
       auto [ec] = co_await
