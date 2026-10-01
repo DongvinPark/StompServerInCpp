@@ -223,23 +223,6 @@ namespace Util
     }).detach();
   }
 
-  inline void delayedExecutorAsyncByIoContext(
-    boost::asio::io_context& io_context,
-    int delayInMillis,
-    std::function<void()> task
-  )
-  {
-    auto timer = std::make_shared<boost::asio::steady_timer>(io_context);
-    timer->expires_after(std::chrono::milliseconds(delayInMillis));
-    timer->async_wait([task, timer](const boost::system::error_code& ec)
-    {
-      if (!ec)
-      {
-        task();
-      }
-    });
-  }
-
   inline std::string getCurrentUtcTimeString()
   {
     auto now = std::chrono::system_clock::now();

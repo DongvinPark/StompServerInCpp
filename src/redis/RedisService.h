@@ -27,218 +27,252 @@
 #include <boost/asio/signal_set.hpp>
 
 #include "../constants/C.h"
-#include <../include/Logger.h>
+#include "../include/Logger.h"
+#include "../include/PeriodicTask.h"
+#include "../include/OnetimeTask.h"
 #include <boost/asio.hpp>
 
 class RedisService : public std::enable_shared_from_this<RedisService>
 {
 public:
-  explicit RedisService(
-    boost::asio::io_context& input_io_context
-    // TODO : 나중에 여기에는 각종 msg_tx 용 객체들이 정의돼야 한다.
-    //  server socket 을 돌리는 Server 객체는 Session 을 만들 뿐, 응답을 전송하지는 않기 때문이다.
-  ) : logger(Logger::getLogger(C::REDIS_MSG_SUBSCRIBER)),
-      io_context(input_io_context),
-      redis_conn(io_context),
-      strand(boost::asio::make_strand(io_context))
-  {
-  }
-
-  ~RedisService()
-  {
-    redis_conn.cancel();
-  }
-
-  void init()
-  {
-    auto self = shared_from_this();
-    cfg.addr.host = C::REDIS_HOST_IP;
-    cfg.addr.port = C::REDIS_PORT;
-
-    // 이 부분은 건드리지 않는게 좋다. boost::asio::detached 대신
-    // 다른 Completion Token 람다를 넣어 봤지만, 무슨 이유에서인지 람다가 실행되지 않아서 그렇다.
-    // 번거롭지만 초기화를 확인하는건 아예 별도의 테스트 함수(void verifyRedisConnection())로 실행하고,
-    // 연결 여부를 caller 쪽에서 확인하고 대응하게 만들었다.
-    redis_conn.async_run(cfg, {}, boost::asio::detached);
-  }
-
-  bool get_is_ready()
-  {
-    return is_ready.load();
-  }
-
-
-  void verifyRedisConnection()
-  {
-    // 이걸로 RedisSession class 멤버필드에 접근 가능.
-    // shared_from_this() 롤 사용하기 위해서는 RedisService.h 자체가 shared_ptr로 초기화 돼야 한다.
-    auto self = shared_from_this();
-    auto reqPtr = std::make_shared<boost::redis::request>();
-    auto resPtr = std::make_shared<boost::redis::response<std::string>>();
-    reqPtr->push("PING");
-
-    // exec redis cmd in async mode
-    std::cout << "Redis Ping Pong Test Start! \n";
-    self->redis_conn.async_exec(
-      *reqPtr,
-      *resPtr,
-      [self, resPtr, reqPtr](const boost::system::error_code& ec, std::size_t)
-      {
-        if (ec)
-        {
-          std::cerr << "Redis PING failed: " << ec.message() << "\n";
-          return;
-        }
-        self->is_ready.store(true); // ping pong test 결과 기록
-        std::cout << "PING: " << std::get<0>(*resPtr).value() << "\n";
-      }
-    );
-
-    // 아래와 같은 '스레드 고의 정지' 같은 '멋지지 않은 방법' 대신 io_context 를 써서 좀 더 'fancy'하게
-    // 처리해보려 했지만 결국 실패하고, 결국 '안 멋지지만 확실히 작동하는 코드'로 롤백했다.
-    // io_context 를 써서 'fancy'하게 구현한 것은 boost 1.9x 버전의 Mac 에서는 잘 작동했지만,
-    // boost 1.86 버전인 윈도우 11 에서는 알 수 없는 에러로 실패했던 것이다.
-
-    // 아무튼 아래의 코드가 있어야 Windows 환경에서는 redis_conn.async_exec(...) 가 정확하게 작동한다.
-    // 이 함수가 끝나는 것을 고의적으로 지연시켜서 async_exec()가 지역 변수들을 참조해서 일을 처리할 때
-    // bad memory access 가 나지 않게 해주기 때문이다.
-    // TODO : 때로는 '우아하고 멋져보이는 코드' 보다는 '지루하고 뻔하지만 작동하는게 보장되는 코드'가 가치 있다.
-    // TODO : 이번 프로젝트 처럼 Boost Lib 같은 외부 라이브러리에 의존해야 하면서
-    // TODO : 해당 라이브러리의 버전이 실행하는 운영체제 마다 다른 경우엔 특히 그렇다.
-    // TODO : 아래의 코드를 없애도 잘될 때도 있지만, 후속 동작(pub/sub channel listener)이 작동을
-    // TODO : 했다가, 안했다가 하면서 불완전한 동작을 보인다. 이상한 코드로 보이더라도 없애지 말길 바란다.
-    // TODO : 때로는 '상식'과 '테스트 결과'가 다르기도 한다.
-    std::this_thread::sleep_for(std::chrono::seconds(C::REDIS_CONN_WAIT_TIMEOUT_SECONDS));
-  }
-
-
-  void publishMsg(const std::string& msg)
-  {
-    auto self = shared_from_this();
-    auto reqPtr = std::make_shared<boost::redis::request>();
-    reqPtr->push("PUBLISH", C::REDIS_PUB_SUB_CHANNEL, msg);
-    auto resPtr = std::make_shared<boost::redis::response<std::string>>();
-
-    // exec redis cmd in async mode
-    self->redis_conn.async_exec(
-      *reqPtr,
-      *resPtr,
-      [self, resPtr, msg](const boost::system::error_code& ec, std::size_t)
-      {
-        if (ec)
-        {
-          std::cerr << "Redis PUBLISH failed: " << ec.message() << "\n";
-          return;
-        }
-        std::cout << "Msg published by this server : " << msg << "\n";
-      }
-    );
-  }
-
-  void startPubSubListening()
-  {
-    if (is_listening.load())
+    explicit RedisService(
+        boost::asio::io_context& input_io_context
+        // TODO : 나중에 여기에는 각종 msg_tx 용 객체들이 정의돼야 한다.
+        //  server socket 을 돌리는 Server 객체는 Session 을 만들 뿐, 응답을 전송하지는 않기 때문이다.
+    ) : logger(Logger::getLogger(C::REDIS_MSG_SUBSCRIBER)),
+        io_context(input_io_context),
+        redis_conn(io_context),
+        strand(boost::asio::make_strand(io_context)),
+        task_cleaner(
+            input_io_context,
+            boost::asio::make_strand(input_io_context),
+            std::chrono::milliseconds(C::ONETIME_TASK_CLEAN_INTERVAL_MS)
+        )
     {
-      logger->warning("Already Listening Pub/Sub channel!");
-      return;
     }
-    is_listening.store(true);
-    boost::asio::co_spawn(
-      io_context,
-      co_entry(cfg),
-      boost::asio::detached
-    );
-  }
 
-  void shutdown()
-  {
-    is_ready.store(false);
-    is_listening.store(false);
-    is_shutdown.store(true);
-    redis_conn.cancel();
-  }
+    ~RedisService()
+    {
+        task_cleaner.stop();
+        redis_conn.cancel();
+    }
+
+    void init()
+    {
+        auto self = shared_from_this();
+        cfg.addr.host = C::REDIS_HOST_IP;
+        cfg.addr.port = C::REDIS_PORT;
+
+        // 이 부분은 건드리지 않는게 좋다. boost::asio::detached 대신
+        // 다른 Completion Token 람다를 넣어 봤지만, 무슨 이유에서인지 람다가 실행되지 않아서 그렇다.
+        // 번거롭지만 초기화를 확인하는건 아예 별도의 테스트 함수(void verifyRedisConnection())로 실행하고,
+        // 연결 여부를 caller 쪽에서 확인하고 대응하게 만들었다.
+        redis_conn.async_run(cfg, {}, boost::asio::detached);
+
+        task_cleaner.setTask(
+            [&]()
+            {
+                onetime_task_vec.clear();
+                logger->severe(
+                    "Dongvin, completely removed onetime tasks in RedisService."
+                );
+            }
+        );
+        task_cleaner.start();
+        logger->info3("Dongvin, timer for onetime task cleaner starts!");
+    }
+
+    bool get_is_ready()
+    {
+        return is_ready.load();
+    }
+
+
+    void verifyRedisConnection()
+    {
+        // 이걸로 RedisSession class 멤버필드에 접근 가능.
+        // shared_from_this() 롤 사용하기 위해서는 RedisService.h 자체가 shared_ptr로 초기화 돼야 한다.
+        auto self = shared_from_this();
+        auto reqPtr = std::make_shared<boost::redis::request>();
+        auto resPtr = std::make_shared<boost::redis::response<std::string>>();
+        reqPtr->push("PING");
+
+        auto onetime_task_ptr = std::make_shared<OnetimeTask>(
+            io_context,
+            C::REDIS_CONN_WAIT_TIMEOUT_MS,
+            [self, reqPtr, resPtr]()
+            {
+                // exec redis cmd in async mode
+                std::cout << "Redis Ping Pong Test Start! \n";
+                self->redis_conn.async_exec(
+                    *reqPtr,
+                    *resPtr,
+                    [self, resPtr, reqPtr](const boost::system::error_code& ec, std::size_t)
+                    {
+                        if (ec)
+                        {
+                            std::cerr << "Redis PING failed: " << ec.message() << "\n";
+                            return;
+                        }
+                        self->is_ready.store(true); // ping pong test 결과 기록
+                        std::cout << "PING: " << std::get<0>(*resPtr).value() << "\n";
+                    }
+                );
+            }
+        );
+        onetime_task_ptr->start();
+        onetime_task_vec.emplace_back(std::move(onetime_task_ptr));
+        // 2026년 10월 1일 pm 09:41 현재, OnetimeTask를 정의해서 shared ptr로 만들었고,
+        // 해당 포인터를 별도의 vector에 담아뒀다가 별도의 타이머로 주기적으로(30초 간격)
+        // onetime task vertor를 비워주는 방식으로 task가 io_context를 통해서
+        // async 하게 처리되게 만들었다.
+        // 그랬더니 지긋지긋했던 SIGABRT 문제와 비일관적인 후속동작 문제가
+        // Mac/Window/Linux 에서 모두 해결됐으며, 호출자의 스레드를 고의로 슬립시켰던
+        // 과거의 방법도 쓸 필요 없게 됐다.
+    }
+
+
+    void publishMsg(const std::string& msg)
+    {
+        auto self = shared_from_this();
+        auto reqPtr = std::make_shared<boost::redis::request>();
+        reqPtr->push("PUBLISH", C::REDIS_PUB_SUB_CHANNEL, msg);
+        auto resPtr = std::make_shared<boost::redis::response<std::string>>();
+
+        auto onetime_task_ptr = std::make_shared<OnetimeTask>(
+            io_context,
+            C::REDIS_CONN_WAIT_TIMEOUT_MS,
+            [self, reqPtr, resPtr, msg]()
+            {
+                // exec redis cmd in async mode
+                self->redis_conn.async_exec(
+                    *reqPtr,
+                    *resPtr,
+                    [self, resPtr, msg](const boost::system::error_code& ec, std::size_t)
+                    {
+                        if (ec)
+                        {
+                            std::cerr << "Redis PUBLISH failed: " << ec.message() << "\n";
+                            return;
+                        }
+                        std::cout << "Msg published by this server : " << msg << "\n";
+                    }
+                );
+            }
+        );
+        onetime_task_ptr->start();
+        onetime_task_vec.emplace_back(std::move(onetime_task_ptr));
+    }
+
+    void startPubSubListening()
+    {
+        if (is_listening.load())
+        {
+            logger->warning("Already Listening Pub/Sub channel!");
+            return;
+        }
+        is_listening.store(true);
+        boost::asio::co_spawn(
+            io_context,
+            co_entry(cfg),
+            boost::asio::detached
+        );
+    }
+
+    void shutdown()
+    {
+        is_ready.store(false);
+        is_listening.store(false);
+        is_shutdown.store(true);
+        redis_conn.cancel();
+    }
 
 private:
-  // 레디스에 푸시된 메시지를 리스닝한다.
-  auto pub_sub_listener(
-    std::shared_ptr<boost::redis::connection> conn) -> boost::asio::awaitable<void>
-  {
-    boost::redis::generic_flat_response resp;
-    conn->set_receive_response(resp);
-
-    // 채널을 구독한다. 여러개 구독할 수도 있다.
-    boost::redis::request req;
-    req.subscribe({C::REDIS_PUB_SUB_CHANNEL});
-    co_await
-      conn->async_exec(req);
-
-    // 채널(또는 채널들) 구독이 완료됐다. 채널에 푸시된 메시지들은 resp에 쌓인다.
-    // 커넥션이 네트워크 에러 떠서 레디스에 다시 연결할 때, 채널들을 자동으로 다시 구독한다.
-    // 그러기 위해서는 request::subscribe()를 호출해야 한다.
-    while (conn->will_reconnect() && !is_shutdown.load())
+    // 레디스에 푸시된 메시지를 리스닝한다.
+    auto pub_sub_listener(
+        std::shared_ptr<boost::redis::connection> conn) -> boost::asio::awaitable<void>
     {
-      // 메시지 도착을 기다린다.
-      auto [ec] = co_await
-        conn->async_receive2(boost::asio::as_tuple);
+        boost::redis::generic_flat_response resp;
+        conn->set_receive_response(resp);
 
-      // 에러 체크.
-      if (ec)
-      {
-        std::cerr << "Error during receive: " << ec << "\n";
-        break;
-      }
+        // 채널을 구독한다. 여러개 구독할 수도 있다.
+        boost::redis::request req;
+        req.subscribe({C::REDIS_PUB_SUB_CHANNEL});
+        co_await
+            conn->async_exec(req);
 
-      // 권한 부족 등의 이유로 아래의 에러체크문이 실행될 수도 있다.
-      if (ec)
-      {
-        std::cerr << "The receive response contains an error: "
-          << resp.error().diagnostic << "\n";
-        break;
-      }
+        // 채널(또는 채널들) 구독이 완료됐다. 채널에 푸시된 메시지들은 resp에 쌓인다.
+        // 커넥션이 네트워크 에러 떠서 레디스에 다시 연결할 때, 채널들을 자동으로 다시 구독한다.
+        // 그러기 위해서는 request::subscribe()를 호출해야 한다.
+        while (conn->will_reconnect() && !is_shutdown.load())
+        {
+            // 메시지 도착을 기다린다.
+            auto [ec] = co_await
+                conn->async_receive2(boost::asio::as_tuple);
 
-      // 받은 응답은 코루틴을 suspend 하지 않으면서 즉각 소비돼야 한다. 즉, async operation 으로 소비하면 안 된다.
-      for (boost::redis::push_view elem : boost::redis::push_parser(resp.value()))
-      {
-        std::cout << "Pub/Sub channel Listening success! : " << elem.channel
-          << ": " << elem.payload << "\n";
-      }
+            // 에러 체크.
+            if (ec)
+            {
+                std::cerr << "Error during receive: " << ec << "\n";
+                break;
+            }
 
-      resp.value().clear();
-    } //wh
-  } //end of
+            // 권한 부족 등의 이유로 아래의 에러체크문이 실행될 수도 있다.
+            if (ec)
+            {
+                std::cerr << "The receive response contains an error: "
+                    << resp.error().diagnostic << "\n";
+                break;
+            }
+
+            // 받은 응답은 코루틴을 suspend 하지 않으면서 즉각 소비돼야 한다. 즉, async operation 으로 소비하면 안 된다.
+            for (boost::redis::push_view elem : boost::redis::push_parser(resp.value()))
+            {
+                std::cout << "Pub/Sub channel Listening success! : " << elem.channel
+                    << ": " << elem.payload << "\n";
+            }
+
+            resp.value().clear();
+        } //wh
+    } //end of
 
 
-  auto co_entry(boost::redis::config cfg) -> boost::asio::awaitable<void>
-  {
-    auto ex = co_await boost::asio::this_coro::executor;
-    auto conn = std::make_shared<boost::redis::connection>(ex);
-    co_spawn(ex, pub_sub_listener(conn), boost::asio::detached);
-    conn->async_run(
-      cfg,
-      boost::asio::consign(boost::asio::detached, conn)
-    );
+    auto co_entry(boost::redis::config cfg) -> boost::asio::awaitable<void>
+    {
+        auto ex = co_await boost::asio::this_coro::executor;
+        auto conn = std::make_shared<boost::redis::connection>(ex);
+        co_spawn(ex, pub_sub_listener(conn), boost::asio::detached);
+        conn->async_run(
+            cfg,
+            boost::asio::consign(boost::asio::detached, conn)
+        );
 
-    boost::asio::signal_set sig_set(ex, SIGINT, SIGTERM);
-    co_await
-      sig_set.async_wait();
+        boost::asio::signal_set sig_set(ex, SIGINT, SIGTERM);
+        co_await
+            sig_set.async_wait();
 
-    conn->cancel();
-  }
+        conn->cancel();
+    }
 
-  std::shared_ptr<Logger> logger;
-  boost::asio::io_context& io_context;
-  boost::redis::connection redis_conn;
-  boost::redis::config cfg;
+    std::shared_ptr<Logger> logger;
+    boost::asio::io_context& io_context;
+    boost::redis::connection redis_conn;
+    boost::redis::config cfg;
 
-  // used strand to reduce cache miss
-  boost::asio::strand<boost::asio::io_context::executor_type> strand;
+    // used strand to reduce cache miss
+    boost::asio::strand<boost::asio::io_context::executor_type> strand;
 
-  std::atomic<bool> is_ready{false};
-  std::atomic<bool> is_listening{false};
-  std::atomic<bool> is_shutdown{false};
+    // Onetime task saving container
+    std::vector<std::shared_ptr<OnetimeTask>> onetime_task_vec;
+    // Onetime task cleaner
+    PeriodicTask task_cleaner;
 
-  // TODO : 나중에 여기에는 각종 msg_tx 용 객체들이 정의돼야 한다.
-  //  server socket 을 돌리는 Server 객체는 Session 을 만들 뿐, 응답을 전송하지는 않기 때문이다.
+    std::atomic<bool> is_ready{false};
+    std::atomic<bool> is_listening{false};
+    std::atomic<bool> is_shutdown{false};
+
+    // TODO : 나중에 여기에는 각종 msg_tx 용 객체들이 정의돼야 한다.
+    //  server socket 을 돌리는 Server 객체는 Session 을 만들 뿐, 응답을 전송하지는 않기 때문이다.
 };
 
 #endif //REDISMESSAGESUBSCRIBER_H

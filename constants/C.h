@@ -23,10 +23,13 @@ namespace C
     constexpr char REDIS_PORT[] = "6379";
     constexpr char REDIS_PUB_SUB_CHANNEL[] = "chat";
     constexpr int REDIS_CONN_WAIT_TIMEOUT_SECONDS = 3;
+    constexpr int REDIS_CONN_WAIT_TIMEOUT_MS = 3000;
 
     // class names
     constexpr char MY_NAME[] = "StompServerInCpp";
+    constexpr char REDIS_SERVICE[] = "RedisService";
     constexpr char PERIODIC_TASK[] = "PeriodicTask";
+    constexpr char ONETIME_TASK[] = "OnetimeTask";
     constexpr char REDIS_MSG_SUBSCRIBER[] = "RedisMessageSubscriber";
     constexpr char SESSION[] = "Session";
     constexpr char STOMP_HANDLER[] = "StompHandler";
@@ -35,6 +38,7 @@ namespace C
     constexpr char EMPTY_STR[] = "";
     constexpr int INVALID = -1;
     constexpr int UNSET = -1;
+    constexpr int ONETIME_TASK_CLEAN_INTERVAL_MS = 30'000;
 
 }
 
