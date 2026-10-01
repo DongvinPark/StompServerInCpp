@@ -115,6 +115,10 @@ int main()
     redis_service_ptr->startPubSubListening();
   }).detach();
 
+  // Redis Pub/Sub channel 에 메시지 퍼블리시 테스트
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  redis_service_ptr->publishMsg("hello redis PubSub listener in C++20");
+
   // 프로그램 정상 종료 준비
   // handle exit signal using boost::asio::signal_set
   boost::asio::signal_set signals(main_io_context, SIGINT, SIGTERM);

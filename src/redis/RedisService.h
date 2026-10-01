@@ -111,11 +111,36 @@ public:
 
   void publishMsg(const std::string& msg)
   {
-    // TODO : implement later
+    auto self = shared_from_this();
+    auto reqPtr = std::make_shared<boost::redis::request>();
+    auto resPtr = std::make_shared<boost::redis::response<std::string>>();
+    const std::string cmd = "PUBLISH " + std::string(C::REDIS_PUB_SUB_CHANNEL) + "\"" + msg + "\"";
+    reqPtr->push(cmd);
+
+    // exec redis cmd in async mode
+    self->redis_conn.async_exec(
+      *reqPtr,
+      *resPtr,
+      [self, resPtr, msg](const boost::system::error_code& ec, std::size_t)
+      {
+        if (ec)
+        {
+          std::cerr << "Redis PUBLISH failed: " << ec.message() << "\n";
+          return;
+        }
+        std::cout << "Pub to Redis : " << msg << "\n";
+      }
+    );
   }
 
   void startPubSubListening()
   {
+    if (is_listening.load())
+    {
+      logger->warning("Already Listening Pub/Sub channel!");
+      return;
+    }
+    is_listening.store(true);
     boost::asio::co_spawn(
       io_context,
       co_entry(cfg),
@@ -126,6 +151,7 @@ public:
   void shutdown()
   {
     is_ready.store(false);
+    is_listening.store(false);
     is_shutdown.store(true);
     redis_conn.cancel();
   }
@@ -140,7 +166,7 @@ private:
 
     // 채널을 구독한다. 여러개 구독할 수도 있다.
     boost::redis::request req;
-    req.subscribe({"chat"});
+    req.subscribe({C::REDIS_PUB_SUB_CHANNEL});
     co_await
       conn->async_exec(req);
 
@@ -171,7 +197,7 @@ private:
       // 받은 응답은 코루틴을 suspend 하지 않으면서 즉각 소비돼야 한다. 즉, async operation 으로 소비하면 안 된다.
       for (boost::redis::push_view elem : boost::redis::push_parser(resp.value()))
       {
-        std::cout << "Received message from channel " << elem.channel
+        std::cout << "Pub/Sub channel Listening success! : " << elem.channel
           << ": " << elem.payload << "\n";
       }
 
@@ -206,6 +232,7 @@ private:
   boost::asio::strand<boost::asio::io_context::executor_type> strand;
 
   std::atomic<bool> is_ready{false};
+  std::atomic<bool> is_listening{false};
   std::atomic<bool> is_shutdown{false};
 
   // TODO : 나중에 여기에는 각종 msg_tx 용 객체들이 정의돼야 한다.

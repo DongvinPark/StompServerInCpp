@@ -22,7 +22,7 @@ namespace C
     constexpr char REDIS_HOST_IP[] = "127.0.0.1";
     constexpr char REDIS_PORT[] = "6379";
     constexpr char REDIS_PUB_SUB_CHANNEL[] = "chat";
-    constexpr int REDIS_CONN_WAIT_TIMEOUT_SECONDS = 5;
+    constexpr int REDIS_CONN_WAIT_TIMEOUT_SECONDS = 3;
 
     // class names
     constexpr char MY_NAME[] = "StompServerInCpp";
