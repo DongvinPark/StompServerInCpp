@@ -58,7 +58,7 @@ int main()
 
 
   // PeriodicTask 실행 테스트.
-  auto test_strand = boost::asio::make_strand(main_io_context);
+  /*auto test_strand = boost::asio::make_strand(main_io_context);
   PeriodicTask periodic_task(main_io_context, test_strand, std::chrono::milliseconds(1000));
   periodic_task.setTask(
     []()
@@ -67,7 +67,7 @@ int main()
     });
   periodic_task.start();
   std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-  periodic_task.stop();
+  periodic_task.stop();*/
 
   // redis conn 테스트.
   std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>(main_io_context);
@@ -108,8 +108,12 @@ int main()
     }
   }
 
-  // Redis Pub/Sub channel 리스닝 테스트 시작 : TODO : implement later - 아직 정상 작동하지는 않는다
-  // redis_service_ptr->startPubSubListening();
+  // Redis Pub/Sub channel 리스닝 테스트 시작
+  std::thread([redis_service_ptr]()
+  {
+    // TODO : 이거는 왜 별개 스레드로 실행시켜야 정상 작동하는 걸까?
+    redis_service_ptr->startPubSubListening();
+  }).detach();
 
   // 프로그램 정상 종료 준비
   // handle exit signal using boost::asio::signal_set

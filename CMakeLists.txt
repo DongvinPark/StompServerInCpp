@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.16)
 # Project name and version
 project(StompServerInCpp VERSION 1.0)
 
-# Set C++ standard to 17 : boost::redis 를 써야 하기 때문에 C++17 이상으로 설정해야 한다.
-set(CMAKE_CXX_STANDARD 17)
+# Set C++ standard to 20 : boost::redis와 코루틴을 써야 하기 때문에 C++20 이상으로 설정해야 한다.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 

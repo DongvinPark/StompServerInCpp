@@ -16,6 +16,16 @@
 #include <boost/redis.hpp>
 #include <boost/redis/src.hpp>
 
+#include <boost/redis/connection.hpp>
+#include <boost/redis/push_parser.hpp>
+
+#include <boost/asio/as_tuple.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/consign.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/signal_set.hpp>
+
 #include "../constants/C.h"
 #include <../include/Logger.h>
 #include <boost/asio.hpp>
@@ -42,7 +52,6 @@ public:
   void init()
   {
     auto self = shared_from_this();
-    boost::redis::config cfg;
     cfg.addr.host = C::REDIS_HOST_IP;
     cfg.addr.port = C::REDIS_PORT;
 
@@ -107,22 +116,10 @@ public:
 
   void startPubSubListening()
   {
-    auto req_ptr = std::make_shared<boost::redis::request>();
-    req_ptr->push("SUBSCRIBE", C::REDIS_PUB_SUB_CHANNEL);
-    auto res_ptr = std::make_shared<boost::redis::response<std::string>>();
-
-    redis_conn.async_exec(
-      *req_ptr, *res_ptr, [this](const boost::system::error_code& ec, std::size_t)
-      {
-        if (ec)
-        {
-          logger->severe("Redis SUBSCRIBE failed: " + ec.message());
-          return;
-        }
-
-        std::cout << "Subscribed! \n";
-        receiveRedisMessage();
-      }
+    boost::asio::co_spawn(
+      io_context,
+      co_entry(cfg),
+      boost::asio::detached
     );
   }
 
@@ -134,48 +131,76 @@ public:
   }
 
 private:
-  void receiveRedisMessage()
+  // 레디스에 푸시된 메시지를 리스닝한다.
+  auto pub_sub_listener(
+    std::shared_ptr<boost::redis::connection> conn) -> boost::asio::awaitable<void>
   {
-    /* 이 코드는 윈도우 환경(boost 1.86)에서는 빌드 됐지만, Mac 환경(boost 1.9x)에서는 빌드 되지 않았다.
-     * 아무래도 테스트가 더 필요한 듯 하다.
-     * 만약 라이브러리 버전에 따라서 서로 완전 다른 함수 시그니처를 가지고 있어서 동일한 코드로는 전혀 대응할 수 없을 때는
-     * 버전 또는 OS에 따라서 별개의 소스코드로 컴파일되게 만드는 등의 작업이 필요할 수 있다.
-     */
+    boost::redis::generic_flat_response resp;
+    conn->set_receive_response(resp);
 
-    // 이 버전은 일단 M1 Mac에서 컴파일은 되지만, 정상 작동하지는 않는다.
-    auto response_ptr = std::make_shared<boost::redis::generic_response>();
-    redis_conn.async_receive(
-      [this, response_ptr](const boost::system::error_code& ec, std::size_t)
+    // 채널을 구독한다. 여러개 구독할 수도 있다.
+    boost::redis::request req;
+    req.subscribe({"chat"});
+    co_await
+      conn->async_exec(req);
+
+    // 채널(또는 채널들) 구독이 완료됐다. 채널에 푸시된 메시지들은 resp에 쌓인다.
+    // 커넥션이 네트워크 에러 떠서 레디스에 다시 연결할 때, 채널들을 자동으로 다시 구독한다.
+    // 그러기 위해서는 request::subscribe()를 호출해야 한다.
+    while (conn->will_reconnect())
+    {
+      // 메시지 도착을 기다린다.
+      auto [ec] = co_await
+        conn->async_receive2(boost::asio::as_tuple);
+
+      // 에러 체크.
+      if (ec)
       {
-        if (ec)
-        {
-          if (ec == boost::asio::error::operation_aborted)
-          {
-            return;
-          }
+        std::cerr << "Error during receive: " << ec << "\n";
+        break;
+      }
 
-          logger->severe("Redis receive failed: " + ec.message());
-          return;
-        }
+      // 권한 부족 등의 이유로 아래의 에러체크문이 실행될 수도 있다.
+      if (ec)
+      {
+        std::cerr << "The receive response contains an error: "
+          << resp.error().diagnostic << "\n";
+        break;
+      }
 
-        // do work with received msg
-        std::cout << "Received Redis message! \n";
-        std::cout << response_ptr->value()[0].value[0] << "\n";
+      // 받은 응답은 코루틴을 suspend 하지 않으면서 즉각 소비돼야 한다. 즉, async operation 으로 소비하면 안 된다.
+      for (boost::redis::push_view elem : boost::redis::push_parser(resp.value()))
+      {
+        std::cout << "Received message from channel " << elem.channel
+          << ": " << elem.payload << "\n";
+      }
 
-        // TODO : implement later - 나중에 여기에 '팬들한테 답장 보내기' 기능 넣어야 한다.
+      resp.value().clear();
+    } //wh
+  } //end of
 
-        // wait for the next msg - if alive
-        if (!is_shutdown.load())
-        {
-          receiveRedisMessage();
-        }
-      } //lambda
-    ); //async_receive()
+
+  auto co_entry(boost::redis::config cfg) -> boost::asio::awaitable<void>
+  {
+    auto ex = co_await boost::asio::this_coro::executor;
+    auto conn = std::make_shared<boost::redis::connection>(ex);
+    co_spawn(ex, pub_sub_listener(conn), boost::asio::detached);
+    conn->async_run(
+      cfg,
+      boost::asio::consign(boost::asio::detached, conn)
+    );
+
+    boost::asio::signal_set sig_set(ex, SIGINT, SIGTERM);
+    co_await
+      sig_set.async_wait();
+
+    conn->cancel();
   }
 
   std::shared_ptr<Logger> logger;
   boost::asio::io_context& io_context;
   boost::redis::connection redis_conn;
+  boost::redis::config cfg;
 
   // used strand to reduce cache miss
   boost::asio::strand<boost::asio::io_context::executor_type> strand;
