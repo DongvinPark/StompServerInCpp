@@ -58,7 +58,7 @@ int main()
 
 
   // PeriodicTask 실행 테스트.
-  /*auto test_strand = boost::asio::make_strand(main_io_context);
+  auto test_strand = boost::asio::make_strand(main_io_context);
   PeriodicTask periodic_task(main_io_context, test_strand, std::chrono::milliseconds(1000));
   periodic_task.setTask(
     []()
@@ -66,52 +66,20 @@ int main()
       std::cout << "Run PeriodicTask!\n";
     });
   periodic_task.start();
-  std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-  periodic_task.stop();*/
+  std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+  periodic_task.stop();
 
   // redis conn 테스트.
-  std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>(main_io_context);
+  std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>();
   redis_service_ptr->init();
 
-  // 5 초간 대기 후 Ping Pong 테스트 시작.
-  int redis_init_wait_cnt = 0;
-  while (true)
-  {
-    redis_init_wait_cnt++;
-    logger->info3(
-      "Waiting for redis connection..." +
-      std::to_string(C::REDIS_CONN_WAIT_TIMEOUT_SECONDS - redis_init_wait_cnt)
-    );
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    if (redis_init_wait_cnt >= C::REDIS_CONN_WAIT_TIMEOUT_SECONDS)
-    {
-      break;
-    }
-  }
-
-  // Ping 테스트로써 레디스 연결 성공 여부를 판단한다.
+  // 레디스 Ping 테스트
   redis_service_ptr->verifyRedisConnection();
-  int test_wait_cnt = 0;
-  while (true)
-  {
-    test_wait_cnt++;
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    if (redis_service_ptr->get_is_ready())
-    {
-      logger->info("Connected to Redis!");
-      break;
-    }
-    if (test_wait_cnt >= C::REDIS_CONN_WAIT_TIMEOUT_SECONDS)
-    {
-      logger->severe("Failed to connect to Redis!");
-      break;
-    }
-  }
 
-  // Redis Pub/Sub channel 리스닝 테스트 시작
+  // Redis Pub/Sub channel 리스닝 시작
   std::thread([redis_service_ptr]()
   {
-    // TODO : 이거는 왜 별개 스레드로 실행시켜야 정상 작동하는 걸까?
+    // startPubSubListening 함수가 blocking이기 때문에 별개 스레드에서 실행시켜야 다음 로직을 실행할 수 있다.
     redis_service_ptr->startPubSubListening();
   }).detach();
 
