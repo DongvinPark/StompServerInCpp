@@ -76,7 +76,7 @@ add_executable(StompServerInCpp
         src/server/Server.h
         src/util/Buffer.cpp
         include/OneTimeTask.h
-        src/timer/OneTimeTask.cpp
+        src/timer/OnetimeTask.cpp
         include/sync_connection.h
 )
 
