@@ -78,6 +78,7 @@ add_executable(StompServerInCpp
         include/OnetimeTask.h
         src/timer/OnetimeTask.cpp
         include/sync_connection.h
+        src/service/TopicHandler.h
 )
 
 # Link Boost libraries and platform-specific libraries

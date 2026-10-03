@@ -36,7 +36,7 @@ private:
   // used strand to reduce cache miss
   boost::asio::strand<boost::asio::io_context::executor_type> strand;
 
-  std::string session_id;
+  long session_id;
 };
 
 #endif //SESSION_H

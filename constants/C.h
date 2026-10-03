@@ -10,13 +10,23 @@ namespace C
     // version
     constexpr char VER[] = "1.0.0";
 
+    // STOMP server urls & port
+    constexpr int STOMP_PORT = 8080;
+
     // class names
     constexpr char MAIN[] = "main";
+    constexpr char MY_NAME[] = "StompServerInCpp";
+    constexpr char REDIS_SERVICE[] = "RedisService";
+    constexpr char PERIODIC_TASK[] = "PeriodicTask";
+    constexpr char ONETIME_TASK[] = "OnetimeTask";
+    constexpr char REDIS_MSG_SUBSCRIBER[] = "RedisMessageSubscriber";
+    constexpr char SERVER[] = "Server";
+    constexpr char SESSION[] = "Session";
+    constexpr char STOMP_HANDLER[] = "StompHandler";
+    constexpr char TOPIC_HANDLER[] = "TopicHandler";
 
     // boost::asio::io_context thread pool cnt
     constexpr int THREAD_CNT_PER_IO_CONTEXT = 2;
-
-    // STOMP server urls
 
     // redis conn
     constexpr char REDIS_HOST_IP[] = "127.0.0.1";
@@ -25,19 +35,11 @@ namespace C
     constexpr int REDIS_CONN_WAIT_TIMEOUT_SECONDS = 3;
     constexpr int REDIS_CONN_WAIT_TIMEOUT_MS = 3000;
 
-    // class names
-    constexpr char MY_NAME[] = "StompServerInCpp";
-    constexpr char REDIS_SERVICE[] = "RedisService";
-    constexpr char PERIODIC_TASK[] = "PeriodicTask";
-    constexpr char ONETIME_TASK[] = "OnetimeTask";
-    constexpr char REDIS_MSG_SUBSCRIBER[] = "RedisMessageSubscriber";
-    constexpr char SESSION[] = "Session";
-    constexpr char STOMP_HANDLER[] = "StompHandler";
-
     // general constants
     constexpr char EMPTY_STR[] = "";
     constexpr int INVALID = -1;
     constexpr int UNSET = -1;
+    constexpr int CLOSED_SESSION_REMOVAL_INTERVAL_MS = 30'000;
     constexpr int ONETIME_TASK_CLEAN_INTERVAL_MS = 30'000;
 
 }

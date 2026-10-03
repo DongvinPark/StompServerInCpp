@@ -6,6 +6,7 @@
 #include "../include/PeriodicTask.h"
 #include "../constants/Util.h"
 #include "../src/redis/RedisService.h"
+#include "../src/server/Server.h"
 
 
 /*
@@ -22,124 +23,129 @@
 
 int main()
 {
-  const std::shared_ptr<Logger> logger = Logger::getLogger(C::MAIN);
-  logger->warning("=================================================================");
-  logger->warning("Dongvin, C++ STOMP Server STARTS. ver: " + std::string{C::VER});
-  logger->warning("=================================================================");
+    const std::shared_ptr<Logger> logger = Logger::getLogger(C::MAIN);
+    logger->warning("=================================================================");
+    logger->warning("Dongvin, C++ STOMP Server STARTS. ver: " + std::string{C::VER});
+    logger->warning("=================================================================");
 
-  // make worker thread pool for main boost.asio io_context
-  boost::asio::io_context main_io_context;
-  auto workGuard = boost::asio::make_work_guard(main_io_context);
-  std::vector<std::thread> threadVec;
-  int cpuCoreCnt = static_cast<int>(std::thread::hardware_concurrency());
-  logger->warning("CPU Core Cnt : " + std::to_string(cpuCoreCnt));
-  for (auto i = 0; i < cpuCoreCnt; ++i)
-  {
-    for (auto j = 0; j < C::THREAD_CNT_PER_IO_CONTEXT; ++j)
+    // make worker thread pool for main boost.asio io_context
+    boost::asio::io_context main_io_context;
+    auto workGuard = boost::asio::make_work_guard(main_io_context);
+    std::vector<std::thread> threadVec;
+    int cpuCoreCnt = static_cast<int>(std::thread::hardware_concurrency());
+    logger->warning("CPU Core Cnt : " + std::to_string(cpuCoreCnt));
+    for (auto i = 0; i < cpuCoreCnt; ++i)
     {
-      threadVec.emplace_back(
-        [&main_io_context]()
+        for (auto j = 0; j < C::THREAD_CNT_PER_IO_CONTEXT; ++j)
         {
-          Util::set_thread_priority();
-          main_io_context.run();
+            threadVec.emplace_back(
+                [&main_io_context]()
+                {
+                    main_io_context.run();
+                }
+            );
         }
-      );
     }
-  }
 
-  logger->warning(
-    "Made io_cotext.run() worker thread pool with thread cnt: "
-    + std::to_string(cpuCoreCnt * C::THREAD_CNT_PER_IO_CONTEXT)
-  );
+    logger->warning(
+        "Made io_cotext.run() worker thread pool with thread cnt: "
+        + std::to_string(cpuCoreCnt * C::THREAD_CNT_PER_IO_CONTEXT)
+    );
 
-  // used std::promise to synchronize the shutdown process
-  std::promise<void> shutdownPromise;
-  auto shutdownFuture = shutdownPromise.get_future();
+    // used std::promise to synchronize the shutdown process
+    std::promise<void> shutdownPromise;
+    auto shutdownFuture = shutdownPromise.get_future();
 
 
-  // PeriodicTask 실행 테스트.
-  auto test_strand = boost::asio::make_strand(main_io_context);
-  PeriodicTask periodic_task(main_io_context, test_strand, std::chrono::milliseconds(1000));
-  periodic_task.setTask(
-    []()
+    // PeriodicTask 실행 테스트.
+    auto test_strand = boost::asio::make_strand(main_io_context);
+    PeriodicTask periodic_task(main_io_context, test_strand, std::chrono::milliseconds(1000));
+    periodic_task.setTask(
+        []()
+        {
+            std::cout << "Run PeriodicTask!\n";
+        });
+    periodic_task.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    periodic_task.stop();
+
+    // redis conn 테스트.
+    std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>();
+    redis_service_ptr->init();
+
+    // 레디스 Ping 테스트
+    redis_service_ptr->verifyRedisConnection();
+
+    // Redis Pub/Sub channel 리스닝 시작
+    std::thread([redis_service_ptr]()
     {
-      std::cout << "Run PeriodicTask!\n";
+        // startPubSubListening 함수가 blocking이기 때문에 별개 스레드에서 실행시켜야 다음 로직을 실행할 수 있다.
+        redis_service_ptr->startPubSubListening();
+    }).detach();
+
+    // Redis Pub/Sub channel 에 메시지 퍼블리시 테스트
+    /*std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    redis_service_ptr->publishMsg("Test Msg Pub to Redis by main!");*/
+
+    Server server(main_io_context);
+    Util::delayedExecutorAsyncByThread(
+        0, [&server] { server.start(); }
+    );
+
+
+    // 프로그램 정상 종료 준비
+    // handle exit signal using boost::asio::signal_set
+    boost::asio::signal_set signals(main_io_context, SIGINT, SIGTERM);
+    signals.async_wait([&](const boost::system::error_code& ec, int signal)
+    {
+        try
+        {
+            if (!ec)
+            {
+                std::cout << "\n\t>>> Received signal: " << signal << ". Stopping server...\n";
+                workGuard.reset();
+
+                if (!main_io_context.stopped())
+                {
+                    main_io_context.stop();
+                }
+
+                std::cout << "\t>>> all io_context stopped.\n";
+                shutdownPromise.set_value();
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Exception during signal handling: " << e.what() << "\n";
+            shutdownPromise.set_exception(std::make_exception_ptr(e));
+        }
     });
-  periodic_task.start();
-  std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-  periodic_task.stop();
 
-  // redis conn 테스트.
-  std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>();
-  redis_service_ptr->init();
+    // Wait for shutdown to complete
+    shutdownFuture.wait();
 
-  // 레디스 Ping 테스트
-  redis_service_ptr->verifyRedisConnection();
+    // Shutdown RedisService
+    redis_service_ptr->shutdown();
 
-  // Redis Pub/Sub channel 리스닝 시작
-  std::thread([redis_service_ptr]()
-  {
-    // startPubSubListening 함수가 blocking이기 때문에 별개 스레드에서 실행시켜야 다음 로직을 실행할 수 있다.
-    redis_service_ptr->startPubSubListening();
-  }).detach();
+    // Shutdown Server.
+    server.shutdown();
 
-  // Redis Pub/Sub channel 에 메시지 퍼블리시 테스트
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-  redis_service_ptr->publishMsg("Test Msg Pub to Redis by main!");
-
-  // 프로그램 정상 종료 준비
-  // handle exit signal using boost::asio::signal_set
-  boost::asio::signal_set signals(main_io_context, SIGINT, SIGTERM);
-  signals.async_wait([&](const boost::system::error_code& ec, int signal)
-  {
-    try
+    // do cleaning before shutting down.
+    for (auto& thread : threadVec)
     {
-      if (!ec)
-      {
-        std::cout << "\n\t>>> Received signal: " << signal << ". Stopping server...\n";
-        workGuard.reset();
-
-        if (!main_io_context.stopped())
+        if (thread.joinable())
         {
-          main_io_context.stop();
+            std::cout << "Joining io_context.run() worker thread " << thread.get_id() << "...\n";
+            thread.join();
         }
-
-        std::cout << "\t>>> all io_context stopped.\n";
-        shutdownPromise.set_value();
-      }
+        else
+        {
+            std::cout << "Cannot join thread : " << thread.get_id() << "\n";
+        }
     }
-    catch (const std::exception& e)
-    {
-      std::cerr << "Exception during signal handling: " << e.what() << "\n";
-      shutdownPromise.set_exception(std::make_exception_ptr(e));
-    }
-  });
 
-  // Wait for shutdown to complete
-  shutdownFuture.wait();
-
-  // Shutdown RedisService
-  redis_service_ptr->shutdown();
-
-  // Shutdown Server.
-  // TODO : implement later - 나중에 서버 셧다운 코드 여기에 넣으라.
-
-  // do cleaning before shutting down.
-  for (auto& thread : threadVec)
-  {
-    if (thread.joinable())
-    {
-      std::cout << "Joining io_context.run() worker thread " << thread.get_id() << "...\n";
-      thread.join();
-    }
-    else
-    {
-      std::cout << "Cannot join thread : " << thread.get_id() << "\n";
-    }
-  }
-
-  logger->warning("=================================================================");
-  logger->warning("Dongvin, C++ STOMP Server SHUTS DOWN gracefully.");
-  logger->warning("=================================================================");
-  return 0;
+    logger->warning("=================================================================");
+    logger->warning("Dongvin, C++ STOMP Server SHUTS DOWN gracefully.");
+    logger->warning("=================================================================");
+    return 0;
 } //main
