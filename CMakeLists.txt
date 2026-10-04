@@ -78,8 +78,15 @@ add_executable(StompServerInCpp
         include/OnetimeTask.h
         src/timer/OnetimeTask.cpp
         include/sync_connection.h
-        src/service/TopicHandler.h
+        src/service/MsgBroker.h
 )
+
+if (MSVC)
+    target_compile_options(
+            StompServerInCpp
+            PRIVATE /bigobj
+    )
+endif()
 
 # Link Boost libraries and platform-specific libraries
 target_link_libraries(StompServerInCpp ${Boost_LIBRARIES} ${PLATFORM_LIBS})

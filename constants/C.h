@@ -23,7 +23,7 @@ namespace C
     constexpr char SERVER[] = "Server";
     constexpr char SESSION[] = "Session";
     constexpr char STOMP_HANDLER[] = "StompHandler";
-    constexpr char TOPIC_HANDLER[] = "TopicHandler";
+    constexpr char MSG_BROKER[] = "MsgBroker";
 
     // boost::asio::io_context thread pool cnt
     constexpr int THREAD_CNT_PER_IO_CONTEXT = 2;

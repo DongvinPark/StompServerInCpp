@@ -15,17 +15,32 @@ class Session;
 class StompHandler
 {
 public:
-  explicit StompHandler(
-    std::weak_ptr<Session> input_session_ptr
-  );
-  ~StompHandler();
+    explicit StompHandler(
+        std::weak_ptr<Session> input_session_ptr
+    ):
+        logger(Logger::getLogger(C::STOMP_HANDLER)),
+        parent_session(input_session_ptr)
+    {
+    }
 
-  void run(Buffer& buf);
-  void handleStompRequest(std::string reqStr, Buffer& buf);
+    ~StompHandler()
+    {
+
+    }
+
+    void run(Buffer& buf)
+    {
+
+    }
+
+    void handleStompRequest(std::string reqStr, Buffer& buf)
+    {
+
+    }
 
 private:
-  std::shared_ptr<Logger> logger;
-  std::weak_ptr<Session> parent_session;
+    std::shared_ptr<Logger> logger;
+    std::weak_ptr<Session> parent_session;
 };
 
 #endif //STOMPHANDLER_H
