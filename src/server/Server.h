@@ -16,8 +16,6 @@
 #include "../include/PeriodicTask.h"
 #include "../src/service/StompHandler.h"
 
-using boost::asio::ip::tcp;
-
 class Session;
 
 class Server
@@ -67,29 +65,21 @@ public:
         remove_session_task.start();
         logger->info3("Dongvin, timer for closed session removal starts!");
 
-        const auto endpoint =
-            boost::beast::net::ip::tcp::endpoint(
-                boost::beast::net::ip::tcp::v4(),
-                C::STOMP_PORT
-            );
-
-        acceptor.open(endpoint.protocol());
-        acceptor.bind(endpoint);
-        acceptor.listen();
+        tcp::acceptor acceptor(
+            io_context, tcp::endpoint(tcp::v4(), C::STOMP_PORT)
+        );
 
         try
         {
             while (is_shutdown.load() == false)
             {
-                auto websocket_stream_ptr = std::make_shared<
-                    boost::beast::websocket::stream<boost::beast::tcp_stream>
-                >(acceptor.accept());
+                auto raw_tcp_socket_ptr = std::make_shared<boost::asio::ip::tcp::socket>(acceptor.accept());
 
                 session_id_counter += 1;
                 auto session_id = session_id_counter.load();
 
                 auto session_ptr = std::make_shared<Session>(
-                    session_id, websocket_stream_ptr, io_context, *this
+                    session_id, raw_tcp_socket_ptr, io_context, *this
                 );
                 session_ptr->setMsgBroker(msg_broker_ptr);
 
