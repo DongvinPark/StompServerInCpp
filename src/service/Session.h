@@ -24,7 +24,7 @@ class StompHandler;
 // Server 내의 member function 을 Session.h 내부에서 호출하려 하면 자꾸
 // incomplete ... 라는 에러가 떠서 빌드가 실패했다.
 
-// 이 문제를 해결하려면 .h / .cpp를 분리한 후 forward decalration 을 하던가,
+// 이 문제를 해결하려면 .h / .cpp를 분리한 후 forward declaration 을 하던가,
 // 멤버 클래스들 전부 포인터로 선언해서 Session 생성 후 일일이 set...(){...} 를 해줘야 한다.
 
 // 후자의 포인터 취급 방법은 프로젝트 크기가 클 수록 '까먹은 set 과정'이 발생할 위험이 크고,
