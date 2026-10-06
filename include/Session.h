@@ -53,7 +53,9 @@ public:
 
   void start();
 
-  void shutdown();
+  long getSessionId();
+
+  bool isShutDown();
 
   void setMsgBroker(const std::shared_ptr<MsgBroker>& msg_broker_ptr);
 

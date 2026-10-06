@@ -127,8 +127,7 @@ int main()
     // Shutdown RedisService
     redis_service_ptr->shutdown();
 
-    // Shutdown Server.
-    server.shutdown();
+    // Server 는 굳이 또 shutdown 시킬 필요가 없다. Destructor 가 알아서 처리해준다.
 
     // do cleaning before shutting down.
     for (auto& thread : threadVec)

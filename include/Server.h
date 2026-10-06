@@ -29,12 +29,10 @@ public:
 
   void start();
 
-  void shutdown();
-
   void afterTerminationSession(long session_id);
 
 private:
-  std::string getSessionId();
+  void shutdown();
 
   std::shared_ptr<Logger> logger;
   boost::asio::io_context& io_context;

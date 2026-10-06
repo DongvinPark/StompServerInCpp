@@ -1,7 +1,11 @@
 //
 // Created by 박동빈 on 2026. 10. 6..
 //
+
 #include "../include/Session.h"
+#include "../../include/Server.h"
+
+#include <iostream>
 
 
 Session::Session(
@@ -23,6 +27,24 @@ Session::Session(
 
 Session::~Session()
 {
+  logger->severe("Session shuts down : " + std::to_string(session_id));
+  is_shutdown.store(true);
+  if (web_socket_ptr != nullptr && web_socket_ptr->is_open())
+  {
+    web_socket_ptr->close(C::UNSET);
+  }
+  if (raw_tcp_socket_ptr != nullptr && raw_tcp_socket_ptr->is_open())
+  {
+    raw_tcp_socket_ptr->close();
+  }
+  if (msg_broker_ptr != nullptr)
+  {
+    msg_broker_ptr = nullptr;
+  }
+  if (stomp_handler_ptr != nullptr)
+  {
+    stomp_handler_ptr = nullptr;
+  }
 }
 
 void Session::start()
@@ -103,7 +125,7 @@ void Session::start()
         read();
       }
     }
-  } // try
+  }// try
   catch (const std::exception& e)
   {
     logger->severe("Failed to set up STOMP connection ! : " + std::string(e.what()));
@@ -113,8 +135,14 @@ void Session::start()
   }
 }
 
-void Session::shutdown()
+long Session::getSessionId()
 {
+  return session_id;
+}
+
+bool Session::isShutDown()
+{
+  return is_shutdown.load();
 }
 
 void Session::setMsgBroker(const std::shared_ptr<MsgBroker>& msg_broker_ptr)
@@ -130,6 +158,10 @@ void Session::setStompHandler(const std::shared_ptr<StompHandler>& stomp_handler
 
 void Session::read()
 {
+  if (is_shutdown.load())
+  {
+    return;
+  }
   auto self = shared_from_this();
   web_socket_ptr->async_read(
     read_buffer,
@@ -141,6 +173,11 @@ void Session::read()
         self->logger->severe("error category: " + std::string(ec.category().name()));
         self->logger->severe("error value: " + std::to_string(ec.value()));
         self->logger->severe("error message: " + ec.message());
+
+        // 여기서 오류 나면 더 이상 socker read를 지속해서는 안 된다.
+        // 현재의 세션을 '삭제 예정 세션' 으로 이동시킨다.
+        self->is_shutdown.store(true);
+        self->parent_server.afterTerminationSession(self->getSessionId());
         return;
       }
 
@@ -162,8 +199,9 @@ void Session::read()
         "version:1.2\n"
         "heart-beat:10000,10000\n"
         "\n";
-      frame.push_back('\0');
+      frame.push_back(C::STOMP_FRAME_NUL_OCTET);
       auto connected_frame = std::make_shared<std::string>(frame);
+
       self->web_socket_ptr->async_write(
         boost::asio::buffer(*connected_frame),
         [self, connected_frame](
@@ -185,7 +223,8 @@ void Session::read()
           );
         }
       );
-      //boost::asio::post(self->strand, [self]() { self->read(); });
+      // TODO : 나중에 async read 루프 구현할 때 쓰도록 한다.
+      //  boost::asio::post(self->strand, [self]() { self->read(); });
     }
   );
 }

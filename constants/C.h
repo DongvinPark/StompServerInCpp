@@ -41,6 +41,7 @@ namespace C
     constexpr int UNSET = -1;
     constexpr int CLOSED_SESSION_REMOVAL_INTERVAL_MS = 30'000;
     constexpr int ONETIME_TASK_CLEAN_INTERVAL_MS = 30'000;
+    constexpr char STOMP_FRAME_NUL_OCTET = '\0';
 
 }
 

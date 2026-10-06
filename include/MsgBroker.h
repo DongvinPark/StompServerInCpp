@@ -1,5 +1,5 @@
 //
-// Created by user on 2026-10-03.
+// Created by 박동빈 on 2026-10-03.
 //
 
 #ifndef MSGBROKER_H
@@ -24,13 +24,13 @@ public:
 
   ~MsgBroker();
 
-  void shutdown();
-
   void subscribe(const std::string& topic, std::shared_ptr<Session> session_ptr);
 
   void unsubscribe(const std::string& topic, std::shared_ptr<Session> session_ptr);
 
   uint32_t sendMsgToAllSesisons(const std::string& topic, const std::string& message);
+
+  void deleteSession(long session_id);
 
 private:
   std::shared_ptr<Logger> logger;
