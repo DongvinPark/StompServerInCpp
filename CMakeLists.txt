@@ -70,15 +70,19 @@ add_executable(StompServerInCpp
         include/PeriodicTask.h
         src/timer/PeriodicTask.cpp
         src/redis/RedisService.h
-        src/service/StompHandler.h
+        include/StompHandler.h
         include/Buffer.h
-        src/service/Session.h
-        src/server/Server.h
+        include/Session.h
+        include/Server.h
         src/util/Buffer.cpp
         include/OnetimeTask.h
         src/timer/OnetimeTask.cpp
         include/sync_connection.h
-        src/service/MsgBroker.h
+        include/MsgBroker.h
+        src/service/StompHandler.cpp
+        src/server/Server.cpp
+        src/service/MsgBroker.cpp
+        src/service/Session.cpp
 )
 
 if (MSVC)

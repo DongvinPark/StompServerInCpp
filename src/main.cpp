@@ -6,7 +6,7 @@
 #include "../include/PeriodicTask.h"
 #include "../constants/Util.h"
 #include "../src/redis/RedisService.h"
-#include "../src/server/Server.h"
+#include "../include/Server.h"
 
 
 /*

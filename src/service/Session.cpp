@@ -1,254 +1,194 @@
 //
-// Created by 박동빈 on 2026. 9. 28..
+// Created by 박동빈 on 2026. 10. 6..
 //
+#include "../include/Session.h"
 
-#ifndef SESSION_H
-#define SESSION_H
 
-#include <boost/asio.hpp>
-#include <boost/beast.hpp>
-#include <memory>
-
-#include "../include/Logger.h"
-#include "../src/service/StompHandler.h"
-
-using boost::asio::ip::tcp;
-
-class Server;
-class MsgBroker;
-class StompHandler;
-
-// RedisService.h 같은 특수한 경우가 아니라면, 클래스 구현시  .h 와 .cpp 를 분리하는 것이 정석이다.
-// 그렇지 않고 Session.h 에다가 모든 구현을 전부 집어넣어 버리면 순환 #include 문제가 발생했을 때
-// forward declaration 만으로는 문제를 해결할 수가 없기 때문이다.
-// Server 내의 member function 을 Session.h 내부에서 호출하려 하면 자꾸
-// incomplete ... 라는 에러가 떠서 빌드가 실패했다.
-
-// 이 문제를 해결하려면 .h / .cpp를 분리한 후 forward declaration 을 하던가,
-// 멤버 클래스들 전부 포인터로 선언해서 Session 생성 후 일일이 set...(){...} 를 해줘야 한다.
-
-// 후자의 포인터 취급 방법은 프로젝트 크기가 클 수록 '까먹은 set 과정'이 발생할 위험이 크고,
-// 객체 생성 후 '이 객체는 올바르게 초기화 된 객체다'라는 보장을 할 수가 없게 된다.
-// 상황이 너무 복잡할 때는 두 가지 방법을 전부 사용해야 할 수도 있다.
-
-class Session : public std::enable_shared_from_this<Session>
+Session::Session(
+  long input_session_id,
+  std::shared_ptr<
+    boost::asio::ip::tcp::socket
+  > input_web_socket_ptr,
+  boost::asio::io_context& input_io_context,
+  Server& input_server
+):
+  logger(Logger::getLogger(C::SESSION)),
+  raw_tcp_socket_ptr(std::move(input_web_socket_ptr)),
+  io_context(input_io_context),
+  strand(boost::asio::make_strand(input_io_context)),
+  parent_server(input_server),
+  session_id(input_session_id)
 {
-public:
-    explicit Session(
-        long input_session_id,
-        std::shared_ptr<
-            boost::asio::ip::tcp::socket
-        > input_web_socket_ptr,
-        boost::asio::io_context& input_io_context,
-        Server& input_server
-    ):
-        logger(Logger::getLogger(C::SESSION)),
-        raw_tcp_socket_ptr(std::move(input_web_socket_ptr)),
-        io_context(input_io_context),
-        strand(boost::asio::make_strand(input_io_context)),
-        parent_server(input_server),
-        session_id(input_session_id)
+}
+
+Session::~Session()
+{
+}
+
+void Session::start()
+{
+  auto self = shared_from_this();
+
+  // Boost Beast 라이브러리 공식 문서 내 예제를 활용했다.
+  // https://www.boost.org/doc/libs/master/libs/beast/doc/html/beast/using_websocket/handshaking.html
+  auto select_protocol = [](boost::beast::string_view offered_tokens) -> std::string
+  {
+    // tokenize the Sec-Websocket-Protocol header offered by the client
+    boost::beast::http::token_list offered(offered_tokens);
+
+    // an array of protocols supported by this server
+    // in descending order of preference
+    static constexpr std::array<boost::beast::string_view, 1>
+      supported = {{"v12.stomp"}};
+
+    std::string result;
+
+    for (auto proto : supported)
     {
+      if (
+        auto iter = std::ranges::find(offered, proto);
+        iter != offered.end()
+      )
+      {
+        // we found a supported protocol in the list offered by the client
+        result.assign(proto.begin(), proto.end());
+        break;
+      }
     }
+    return result;
+  };
 
-    ~Session()
+  try
+  {
+    boost::beast::flat_buffer buffer;
+    boost::beast::http::request<boost::beast::http::string_body> req;
+    boost::beast::http::read(*raw_tcp_socket_ptr, buffer, req);
+    if (boost::beast::websocket::is_upgrade(req))
     {
-    }
+      std::string protocol =
+        select_protocol(req[boost::beast::http::field::sec_websocket_protocol]);
 
-    // Rule of five. Session object is not allowed to copy or move.
-    Session(const Session&) = delete;
-    Session& operator=(const Session&) = delete;
-    Session& operator=(Session&&) noexcept = delete;
-    Session(Session&&) noexcept = delete;
+      if (protocol.empty())
+      {
+        // none of our supported protocols were offered
+        boost::beast::http::response<boost::beast::http::string_body> res;
+        res.result(boost::beast::http::status::bad_request);
+        res.body() = "No valid sub-protocol was offered."
+          " This server implements"
+          " v12.stomp only!";
+        boost::beast::http::write(*raw_tcp_socket_ptr, res);
+      }
+      else
+      {
+        // Construct the stream, transferring ownership of the socket
+        web_socket_ptr = std::make_shared<
+          boost::beast::websocket::stream<boost::beast::tcp_stream>
+        >(std::move(*raw_tcp_socket_ptr));
 
-    void start()
-    {
-        auto self = shared_from_this();
 
-        // Boost Beast 라이브러리 공식 문서 내 예제를 활용했다.
-        // https://www.boost.org/doc/libs/master/libs/beast/doc/html/beast/using_websocket/handshaking.html
-        auto select_protocol = [](boost::beast::string_view offered_tokens) -> std::string
-        {
-            // tokenize the Sec-Websocket-Protocol header offered by the client
-            boost::beast::http::token_list offered(offered_tokens);
-
-            // an array of protocols supported by this server
-            // in descending order of preference
-            static constexpr std::array<boost::beast::string_view, 1>
-                supported = { { "v12.stomp" } };
-
-            std::string result;
-
-            for (auto proto : supported)
+        web_socket_ptr->set_option(
+          boost::beast::websocket::stream_base::decorator(
+            [protocol](boost::beast::http::response_header<>& hdr)
             {
-                if (
-                    auto iter = std::ranges::find(offered, proto);
-                    iter != offered.end()
-                )
-                {
-                    // we found a supported protocol in the list offered by the client
-                    result.assign(proto.begin(), proto.end());
-                    break;
-                }
+              hdr.set(
+                boost::beast::http::field::sec_websocket_protocol,
+                protocol
+              );
             }
-            return result;
-        };
+          ) //decorator
+        ); //set option
 
-        try
-        {
-            boost::beast::flat_buffer buffer;
-            boost::beast::http::request<boost::beast::http::string_body> req;
-            boost::beast::http::read(*raw_tcp_socket_ptr, buffer, req);
-            if (boost::beast::websocket::is_upgrade(req))
-            {
-                std::string protocol =
-                    select_protocol(req[boost::beast::http::field::sec_websocket_protocol]);
-
-                if (protocol.empty())
-                {
-                    // none of our supported protocols were offered
-                    boost::beast::http::response<boost::beast::http::string_body> res;
-                    res.result(boost::beast::http::status::bad_request);
-                    res.body() = "No valid sub-protocol was offered."
-                        " This server implements"
-                        " v12.stomp only!";
-                    boost::beast::http::write(*raw_tcp_socket_ptr, res);
-                }
-                else
-                {
-                    // Construct the stream, transferring ownership of the socket
-                    web_socket_ptr = std::make_shared<
-                        boost::beast::websocket::stream<boost::beast::tcp_stream>
-                    >(std::move(*raw_tcp_socket_ptr));
-
-
-                    web_socket_ptr->set_option(
-                        boost::beast::websocket::stream_base::decorator(
-                            [protocol](boost::beast::http::response_header<>& hdr)
-                            {
-                                hdr.set(
-                                    boost::beast::http::field::sec_websocket_protocol,
-                                    protocol
-                                );
-                            }
-                        ) //decorator
-                    ); //set option
-
-                    // Accept the upgrade request
-                    web_socket_ptr->accept(req);
-                    read();
-                }
-            }
-        } // try
-        catch (const std::exception& e)
-        {
-            logger->severe("Failed to set up STOMP connection ! : " + std::string(e.what()));
-        } catch (...)
-        {
-            logger->severe("Failed to set up STOMP connection with unknown exception!");
-        }
+        // Accept the upgrade request
+        web_socket_ptr->accept(req);
+        read();
+      }
     }
+  } // try
+  catch (const std::exception& e)
+  {
+    logger->severe("Failed to set up STOMP connection ! : " + std::string(e.what()));
+  } catch (...)
+  {
+    logger->severe("Failed to set up STOMP connection with unknown exception!");
+  }
+}
 
-    void shutdown()
+void Session::shutdown()
+{
+}
+
+void Session::setMsgBroker(const std::shared_ptr<MsgBroker>& msg_broker_ptr)
+{
+  this->msg_broker_ptr = msg_broker_ptr;
+}
+
+void Session::setStompHandler(const std::shared_ptr<StompHandler>& stomp_handler_ptr)
+{
+  this->stomp_handler_ptr = stomp_handler_ptr;
+}
+
+
+void Session::read()
+{
+  auto self = shared_from_this();
+  web_socket_ptr->async_read(
+    read_buffer,
+    [self](const boost::system::error_code& ec, std::size_t bytes_transferred)
     {
-    }
+      if (ec)
+      {
+        self->logger->severe("WebSocket read failed!");
+        self->logger->severe("error category: " + std::string(ec.category().name()));
+        self->logger->severe("error value: " + std::to_string(ec.value()));
+        self->logger->severe("error message: " + ec.message());
+        return;
+      }
 
-    void setMsgBroker(const std::shared_ptr<MsgBroker>& msg_broker_ptr)
-    {
-        this->msg_broker_ptr = msg_broker_ptr;
-    }
-
-    void setStompHandler(const std::shared_ptr<StompHandler>& stomp_handler_ptr)
-    {
-        this->stomp_handler_ptr = stomp_handler_ptr;
-    }
-
-private:
-    void read()
-    {
-        auto self = shared_from_this();
-        web_socket_ptr->async_read(
-            read_buffer,
-            [self](const boost::system::error_code& ec, std::size_t bytes_transferred)
-            {
-                if (ec)
-                {
-                    self->logger->severe("WebSocket read failed!");
-                    self->logger->severe("error category: " + std::string(ec.category().name()));
-                    self->logger->severe("error value: " + std::to_string(ec.value()));
-                    self->logger->severe("error message: " + ec.message());
-                    return;
-                }
-
-                const auto req =
-                    boost::beast::buffers_to_string(
-                        self->read_buffer.data()
-                    );
-
-                self->logger->info3("req from client!");
-                self->logger->info3(req);
-
-                self->read_buffer.consume(
-                    self->read_buffer.size()
-                );
-
-                // TODO : 나중에 async read 루프 제대로 구현하고, 지금은 야매로 한 번 connected 응답한다.
-                std::string frame =
-                    "CONNECTED\n"
-                    "version:1.2\n"
-                    "heart-beat:10000,10000\n"
-                    "\n";
-                frame.push_back('\0');
-                auto connected_frame = std::make_shared<std::string>(frame);
-                self->web_socket_ptr->async_write(
-                    boost::asio::buffer(*connected_frame),
-                    [self, connected_frame](
-                    const boost::system::error_code& ec,
-                    std::size_t bytes_transferred
-                )
-                    {
-                        if (ec)
-                        {
-                            self->logger->severe(
-                                "WebSocket write failed: " + ec.message()
-                            );
-                            return;
-                        }
-
-                        self->logger->info3(
-                            "CONNECTED sent! bytes: " +
-                            std::to_string(bytes_transferred)
-                        );
-                    }
-                );
-                //boost::asio::post(self->strand, [self]() { self->read(); });
-            }
+      const auto req =
+        boost::beast::buffers_to_string(
+          self->read_buffer.data()
         );
+
+      self->logger->info3("req from client!");
+      self->logger->info3(req);
+
+      self->read_buffer.consume(
+        self->read_buffer.size()
+      );
+
+      // TODO : 나중에 async read 루프 제대로 구현하고, 지금은 야매로 한 번 connected 응답한다.
+      std::string frame =
+        "CONNECTED\n"
+        "version:1.2\n"
+        "heart-beat:10000,10000\n"
+        "\n";
+      frame.push_back('\0');
+      auto connected_frame = std::make_shared<std::string>(frame);
+      self->web_socket_ptr->async_write(
+        boost::asio::buffer(*connected_frame),
+        [self, connected_frame](
+        const boost::system::error_code& ec,
+        std::size_t bytes_transferred
+      )
+        {
+          if (ec)
+          {
+            self->logger->severe(
+              "WebSocket write failed: " + ec.message()
+            );
+            return;
+          }
+
+          self->logger->info3(
+            "CONNECTED sent! bytes: " +
+            std::to_string(bytes_transferred)
+          );
+        }
+      );
+      //boost::asio::post(self->strand, [self]() { self->read(); });
     }
-
-    std::shared_ptr<Logger> logger;
-
-    std::shared_ptr<
-        boost::asio::ip::tcp::socket
-    > raw_tcp_socket_ptr;
-
-    std::shared_ptr<
-        boost::beast::websocket::stream<boost::beast::tcp_stream>
-    > web_socket_ptr = nullptr;
-
-    boost::beast::flat_buffer read_buffer;
-    boost::asio::io_context& io_context;
-    boost::asio::strand<boost::asio::io_context::executor_type> strand;
-    Server& parent_server;
-
-    std::shared_ptr<MsgBroker> msg_broker_ptr = nullptr;
-    std::shared_ptr<StompHandler> stomp_handler_ptr = nullptr;
-
-    long session_id;
-    std::atomic<bool> is_shutdown{false};
-};
-
-#endif //SESSION_H
+  );
+}
 
 /*
  * ============================================================================
