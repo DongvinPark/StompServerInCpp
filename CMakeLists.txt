@@ -59,8 +59,6 @@ endif()
 include_directories(${Boost_INCLUDE_DIRS} src)
 
 # Add the executable
-# 소스 파일들은 각각 int main(){...} 을 가지고 있기 때문에
-# add_executable 안에는 오직 1 개의 소스 파일만 주석 해제 돼 있어야 한다.
 add_executable(StompServerInCpp
         src/main.cpp
         constants/C.h
