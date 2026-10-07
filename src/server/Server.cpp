@@ -88,13 +88,11 @@ void Server::afterTerminationSession(const long session_id)
         // 그 후 '삭제 예정인 세션 맵'으로 이동시킨다.
         if (
             auto sessionPtr = session_id_map[session_id];
-            sessionPtr != nullptr && sessionPtr->isShutDown() == false
+            sessionPtr != nullptr
         )
         {
             session_id_map.erase(session_id);
-            std::cout << "!!! session map erase complete !!!\n";
             shutdown_session_map.insert({session_id, std::move(sessionPtr)});
-            std::cout << "!!! move to remove target map completes !!!\n";
             logger->warning(
                 "Session, " + std::to_string(session_id) + " shuts down. Remaining session cnt : "
                 + std::to_string(session_id_map.size())

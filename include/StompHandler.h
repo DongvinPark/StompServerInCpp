@@ -21,13 +21,11 @@ public:
 
   ~StompHandler();
 
-  void run(Buffer& buf);
-
-  void handleStompRequest(std::string reqStr, Buffer& buf);
+  std::string handleStompReq(const std::string& req, bool& is_disconnected);
 
 private:
   std::shared_ptr<Logger> logger;
-  std::weak_ptr<Session> parent_session;
+  std::weak_ptr<Session> parent_session_ptr;
 };
 
 #endif //STOMPHANDLER_H

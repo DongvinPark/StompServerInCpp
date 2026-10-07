@@ -189,22 +189,19 @@ void Session::read()
       self->logger->info3("req from client!");
       self->logger->info3(req);
 
-      self->read_buffer.consume(
-        self->read_buffer.size()
-      );
+      bool is_disconnected = false;
+      std::string res_frame = self->stomp_handler_ptr->handleStompReq(req, is_disconnected);
+      self->logger->info2("res for client!");
+      self->logger->info2(res_frame);
+      self->logger->severe("!!! is disconnected : " + std::to_string(is_disconnected));
 
-      // TODO : 나중에 async read 루프 제대로 구현하고, 지금은 야매로 한 번 connected 응답한다.
-      std::string frame =
-        "CONNECTED\n"
-        "version:1.2\n"
-        "heart-beat:10000,10000\n"
-        "\n";
-      frame.push_back(C::STOMP_FRAME_NUL_OCTET);
-      auto connected_frame = std::make_shared<std::string>(frame);
+      // 이미 읽었으므로 버퍼를 비운다.
+      self->read_buffer.consume(self->read_buffer.size());
 
+      auto connected_frame = std::make_shared<std::string>(res_frame);
       self->web_socket_ptr->async_write(
         boost::asio::buffer(*connected_frame),
-        [self, connected_frame](
+        [self, connected_frame, &is_disconnected](
         const boost::system::error_code& ec,
         std::size_t bytes_transferred
       )
@@ -216,15 +213,16 @@ void Session::read()
             );
             return;
           }
-
-          self->logger->info3(
-            "CONNECTED sent! bytes: " +
-            std::to_string(bytes_transferred)
-          );
+          self->logger->info3("Response sent bytes: " +std::to_string(bytes_transferred));
+          // 만약 DISCONNECT 요청이었다면, 현재 세션은 '삭제 예정 세션'으로 이동해야 한다.
+          if (is_disconnected)
+          {
+            self->is_shutdown.store(true);
+            self->parent_server.afterTerminationSession(self->getSessionId());
+          }
         }
-      );
-      // TODO : 나중에 async read 루프 구현할 때 쓰도록 한다.
-      //  boost::asio::post(self->strand, [self]() { self->read(); });
+      );// async_write
+      boost::asio::post(self->strand, [self]() { self->read(); });
     }
   );
 }
