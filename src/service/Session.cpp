@@ -23,22 +23,15 @@ Session::Session(
   io_context(input_io_context),
   strand(boost::asio::make_strand(input_io_context)),
   parent_server(input_server),
-  session_id(input_session_id)
+  session_id(input_session_id),
+  heart_beat_time_millis(Util::getCurrentTimeMillis())
 {
 }
 
 Session::~Session()
 {
   logger->severe("Session shuts down : " + std::to_string(session_id));
-  is_shutdown.store(true);
-  if (web_socket_ptr != nullptr && web_socket_ptr->is_open())
-  {
-    web_socket_ptr->close(C::UNSET);
-  }
-  if (raw_tcp_socket_ptr != nullptr && raw_tcp_socket_ptr->is_open())
-  {
-    raw_tcp_socket_ptr->close();
-  }
+  setShutdownTrue();
 
   // TODO : implement later - 현재 세션이 구독했던 모든 토픽들에서 unscribe 해야 한다.
 
@@ -157,12 +150,12 @@ void Session::start()
   } // try
   catch (const std::exception& e)
   {
-    is_shutdown.store(true);
+    setShutdownTrue();
     logger->severe("Failed to set up STOMP connection ! e.what() : " + std::string(e.what()));
     parent_server.afterTerminationSession(session_id);
   } catch (...)
   {
-    is_shutdown.store(true);
+    setShutdownTrue();
     logger->severe("Failed to set up STOMP connection with unknown exception!");
     parent_server.afterTerminationSession(session_id);
   }
@@ -178,9 +171,21 @@ bool Session::isShutDown()
   return is_shutdown.load();
 }
 
-void Session::setShutdownTure()
+void Session::setShutdownTrue()
 {
+  if (is_shutdown.load())
+  {
+    return;
+  }
   is_shutdown.store(true);
+  if (web_socket_ptr != nullptr && web_socket_ptr->is_open())
+  {
+    web_socket_ptr->close(C::UNSET);
+  }
+  if (raw_tcp_socket_ptr != nullptr && raw_tcp_socket_ptr->is_open())
+  {
+    raw_tcp_socket_ptr->close();
+  }
 }
 
 int64_t Session::getLatestHeartBeatTimeMillis()
@@ -195,19 +200,27 @@ void Session::sendHeartBeatToClient()
    * 1. server -> client : 이거를 안 보내면 클라이언트가 연결을 끊는다.
    * 2. server <- client : 서버가 이거를 못 받으면 클라이언트 커넥션와 관련 세션을 제거한다.
    */
-  auto self = shared_from_this();
-  auto res_frame_ptr = std::make_shared<std::string>(&C::SINGLE_BACK_SLASH);
-  self->web_socket_ptr->async_write(
-    boost::asio::buffer(*res_frame_ptr),
-    [self, res_frame_ptr]
-  (const boost::system::error_code& ec, std::size_t)
-    {
-      if (ec)
+  if (!isShutDown())
+  {
+    auto self = shared_from_this();
+    auto res_frame_ptr = std::make_shared<std::string>(&C::SINGLE_BACK_SLASH);
+    boost::asio::post(
+      self->strand,
+      [self, res_frame_ptr]()
       {
-        self->logger->severe("WebSocket heart beat write failed: " + ec.message());
+        self->web_socket_ptr->async_write(
+          boost::asio::buffer(*res_frame_ptr),
+          [self, res_frame_ptr](const boost::system::error_code& ec, std::size_t)
+          {
+            if (ec)
+            {
+              self->logger->severe("WebSocket heart beat write failed: " + ec.message());
+            }
+          }
+        ); // async_write
       }
-    }
-  ); // async_write
+    );
+  }
 }
 
 void Session::setMsgBroker(const std::shared_ptr<MsgBroker>& msg_broker_ptr)
@@ -239,7 +252,7 @@ void Session::read()
 
         // 여기서 오류 나면 더 이상 socker read를 지속해서는 안 된다.
         // 현재의 세션을 '삭제 예정 세션' 으로 이동시킨다.
-        self->is_shutdown.store(true);
+        self->setShutdownTrue();
         self->parent_server.afterTerminationSession(self->getSessionId());
         return;
       }
@@ -273,17 +286,10 @@ void Session::read()
             // 만약 DISCONNECT 요청이었다면, 현재 세션은 '삭제 예정 세션 맵'으로 이동해야 한다.
             if (is_disconnected)
             {
-              self->is_shutdown.store(true);
-              if (self->web_socket_ptr != nullptr && self->web_socket_ptr->is_open())
-              {
-                self->web_socket_ptr->close(C::UNSET);
-              }
-              if (self->raw_tcp_socket_ptr != nullptr && self->raw_tcp_socket_ptr->is_open())
-              {
-                self->raw_tcp_socket_ptr->close();
-              }
+              self->setShutdownTrue();
 
               // TODO : implement later - 현재 세션이 구독했던 모든 토픽들에서 unscribe 해야 한다.
+
               self->parent_server.afterTerminationSession(self->getSessionId());
               return;
             }

@@ -33,8 +33,12 @@ std::string StompHandler::handleStompReq(const std::string& req, bool& is_discon
     return C::EMPTY_STR;
   }
 
-  logger->info3(">>> req from client :");
-  logger->info3(req);
+  if (req.back() != C::SINGLE_BACK_SLASH)
+  {
+    // heart beat 요청은 출력하지 않는다.
+    logger->info3(">>> req from client :\n");
+    logger->info3(req);
+  }
 
   // TODO : 헤더 Key & Value 들을 파싱하는 부분을 나중에 추가해야 한다.
   const auto& method = req_parts[0];

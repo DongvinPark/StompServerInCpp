@@ -34,33 +34,41 @@ void Server::start()
 
   // 연결 끊어진 세션 제거 타이머
   remove_session_task.setTask([&]()
-  {
-    shutdown_session_map.clear();
-    logger->severe("Dongvin, completely removed sessions.");
-
-    // heart beat 도 보낸다.
-    for (const auto& [session_id, session_ptr] : session_id_map)
     {
-      // 가장 최근에 해당 세션의 클라이언트에게서 온 heart beat 시각과 현재 시각을 대조한다.
-      const int64_t current_time_millis = Util::getCurrentTimeMillis();
-      const int64_t latest_heart_beat_time_millis = session_ptr->getLatestHeartBeatTimeMillis();
-      if (
-        const int64_t diff = current_time_millis - latest_heart_beat_time_millis;
-        diff > static_cast<int64_t>(C::HEART_BEAT_MS)
-      )
+      shutdown_session_map.clear();
+      logger->severe("Dongvin, completely removed sessions.");
+
+      // heart beat 도 체크한다. 가장 최근 heart beat 받은 시각이 현재시각 기준으로
+      // '임계값'보다 과거이면 그 세션은 제거한다.
+      int alive_session_count = 0;
+      for (const auto& [session_id, session_ptr] : session_id_map)
       {
-        // 이때는 세션을 버려야 한다.
-        session_ptr->setShutdownTure();
-        this->afterTerminationSession(session_id);
-        continue;
-      }
-      // 실제로 살아있는 클라이언트 이므로 heart beat 전송.
-      if (session_ptr->isShutDown() == false)
-      {
-        session_ptr->sendHeartBeatToClient();
-      }
+        // 가장 최근에 해당 세션의 클라이언트에게서 온 heart beat 시각과 현재 시각을 대조한다.
+        const int64_t beat_arrive_time_millis = Util::getCurrentTimeMillis();
+        const int64_t latest_heart_beat_time_millis = session_ptr->getLatestHeartBeatTimeMillis();
+        if (
+          const int64_t diff = beat_arrive_time_millis - latest_heart_beat_time_millis;
+          diff > static_cast<int64_t>(/*C::HEART_BEAT_MS*/5000)
+        )
+        {
+          // 이때는 세션을 버려야 한다.
+          session_ptr->setShutdownTrue();
+          std::cout << "!!! 세션 셧다운 트루 완료 !!!\n";
+          afterTerminationSession(session_ptr->getSessionId()); // TODO : 왜 여기 호출 후 맥에서 SIGABRT 가 뜨지??
+          std::cout << "!!! 애프터 터미네이션 콜 완료 !!!\n";
+        }
+        if (session_ptr->isShutDown() == false)
+        {
+          alive_session_count++;
+          session_ptr->sendHeartBeatToClient();
+        }
+      } //for
+      logger->severe(
+        "Dongvin, sent hear-beat to alive sessions. cnt : "
+        + std::to_string(alive_session_count)
+      );
     }
-  });
+  );
   remove_session_task.start();
   logger->info3("Dongvin, timer for closed session removal starts!");
 
@@ -72,8 +80,7 @@ void Server::start()
   {
     while (is_shutdown.load() == false)
     {
-      auto raw_tcp_socket_ptr = std::make_shared<boost::asio::ip::tcp::socket>(
-        acceptor.accept());
+      auto raw_tcp_socket_ptr = std::make_shared<boost::asio::ip::tcp::socket>(acceptor.accept());
 
       session_id_counter += 1;
       auto session_id = session_id_counter.load();

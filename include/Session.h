@@ -57,7 +57,7 @@ public:
 
   bool isShutDown();
 
-  void setShutdownTure();
+  void setShutdownTrue();
 
   int64_t getLatestHeartBeatTimeMillis();
 

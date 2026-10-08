@@ -14,6 +14,7 @@ namespace C
     constexpr int STOMP_PORT = 8080;
     constexpr char STOMP_SERVER_END_POINT[] = "/gs-guide-websocket";
     constexpr int HEART_BEAT_MS = 33'000; // 33 초.
+    constexpr int HEART_BEAT_THRESHOLD_MS = 1800 * 1000; // 30 분.
     constexpr char HEART_BEAT_RESULT[] = "heartbeat";
 
     // class names
