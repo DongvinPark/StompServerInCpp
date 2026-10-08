@@ -56,8 +56,9 @@ void Server::start()
         {
             // 가장 최근 heart beat 받은 시각이 '임계값'보다 과거이면 그 세션은 제거한다.
             // 단, 원본 맵은 참조하지 않고, 복사본 맵으로 본다.
+            // 세션을 복사하는게 아니라 포인터를 복사하는 것이므로 deep copy 해도 상관 없다.
             // 여기서 원본 맵으로 순회하면 동일한 맵을 순회하면서 동시에 수정하는 data race 가 발생한다.
-            // 그 결과 SIGSEGV, abort() 등이 뜨면서 서버가 예외도 던지지 못하고 바로 죽는다.
+            // 그러면 SIGSEGV, abort() 등이 뜨면서 서버가 예외도 던지지 못하고 바로 죽는다.
             auto copied_session_map = session_id_map;
             int alive_session_count = 0;
             for (const auto& [session_id, session_ptr] : copied_session_map)
