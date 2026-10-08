@@ -32,7 +32,6 @@ public:
   void afterTerminationSession(long session_id);
 
 private:
-  void shutdown();
 
   std::shared_ptr<Logger> logger;
   boost::asio::io_context& io_context;
@@ -47,6 +46,7 @@ private:
   // 별도의 periodic task로 주기적으로(ex : 30 sec) 제거한다. 그래야 SIGABRT 에러 피할 수 있다.
   std::unordered_map<long, std::shared_ptr<Session>> shutdown_session_map{};
   PeriodicTask remove_session_task;
+  PeriodicTask heart_beat_task;
 
   std::atomic<bool> is_shutdown{false};
   std::atomic<long> session_id_counter{0L};

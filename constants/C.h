@@ -14,7 +14,7 @@ namespace C
     constexpr int STOMP_PORT = 8080;
     constexpr char STOMP_SERVER_END_POINT[] = "/gs-guide-websocket";
     constexpr int HEART_BEAT_MS = 33'000; // 33 초.
-    constexpr int HEART_BEAT_THRESHOLD_MS = 1800 * 1000; // 30 분.
+    constexpr int HEART_BEAT_THRESHOLD_MS = 10 * 60 * 1000; // 10 분.
     constexpr char HEART_BEAT_RESULT[] = "heartbeat";
 
     // class names
@@ -41,12 +41,13 @@ namespace C
 
     // general constants
     constexpr char EMPTY_STR[] = "";
+    constexpr char HEART_BEAT_STR[] = "\n";
     constexpr int INVALID = -1;
     constexpr int UNSET = -1;
     constexpr int CLOSED_SESSION_REMOVAL_INTERVAL_MS = 30'000;
     constexpr int ONETIME_TASK_CLEAN_INTERVAL_MS = 30'000;
     constexpr char STOMP_FRAME_NUL_OCTET = '\0';
-    constexpr char SINGLE_BACK_SLASH = '\n';
+    constexpr char SINGLE_BACK_SLASH_CHAR = '\n';
 
 }
 

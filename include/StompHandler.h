@@ -21,7 +21,7 @@ public:
 
   ~StompHandler();
 
-  std::string handleStompReq(const std::string& req, bool& is_disconnected);
+  std::string handleStompReq(const std::string& req, std::shared_ptr<bool> is_disconnected_ptr);
 
 private:
   std::shared_ptr<Logger> logger;
