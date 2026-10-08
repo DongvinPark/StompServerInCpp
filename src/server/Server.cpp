@@ -91,8 +91,8 @@ void Server::afterTerminationSession(const long session_id)
             sessionPtr != nullptr
         )
         {
-            session_id_map.erase(session_id);
             shutdown_session_map.insert({session_id, std::move(sessionPtr)});
+            session_id_map.erase(session_id);
             logger->warning(
                 "Session, " + std::to_string(session_id) + " shuts down. Remaining session cnt : "
                 + std::to_string(session_id_map.size())

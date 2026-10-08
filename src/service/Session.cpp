@@ -85,44 +85,62 @@ void Session::start()
     boost::beast::flat_buffer buffer;
     boost::beast::http::request<boost::beast::http::string_body> req;
     boost::beast::http::read(*raw_tcp_socket_ptr, buffer, req);
-    if (boost::beast::websocket::is_upgrade(req))
+
+    if (!boost::beast::websocket::is_upgrade(req))
     {
-      std::string protocol =
-        select_protocol(req[boost::beast::http::field::sec_websocket_protocol]);
+      // web socket 으로 업그레이드 해달라는 요청이 아님
+      logger->severe("Not a web socket upgrade req!");
+      parent_server.afterTerminationSession(session_id);
+      return;
+    }
+    if (req.method() != boost::beast::http::verb::get)
+    {
+      logger->severe("Not a HTTP GET req!");
+      parent_server.afterTerminationSession(session_id);
+      return;
+    }
+    if (req.target() != C::STOMP_SERVER_END_POINT)
+    {
+      logger->severe("STOMP server endpoint not matches!");
+      parent_server.afterTerminationSession(session_id);
+      return;
+    }
 
-      if (protocol.empty())
-      {
-        // none of our supported protocols were offered
-        boost::beast::http::response<boost::beast::http::string_body> res;
-        res.result(boost::beast::http::status::bad_request);
-        res.body() = "No valid sub-protocol was offered."
-          " This server implements"
-          " v12.stomp only!";
-        boost::beast::http::write(*raw_tcp_socket_ptr, res);
-      }
-      else
-      {
-        // Construct the stream, transferring ownership of the socket
-        web_socket_ptr = std::make_shared<
-          boost::beast::websocket::stream<boost::beast::tcp_stream>
-        >(std::move(*raw_tcp_socket_ptr));
+    std::string protocol =
+      select_protocol(req[boost::beast::http::field::sec_websocket_protocol]);
 
-        web_socket_ptr->set_option(
-          boost::beast::websocket::stream_base::decorator(
-            [protocol](boost::beast::http::response_header<>& hdr)
-            {
-              hdr.set(
-                boost::beast::http::field::sec_websocket_protocol,
-                protocol
-              );
-            }
-          ) //decorator
-        ); //set option
+    if (protocol.empty())
+    {
+      // none of our supported protocols were offered
+      boost::beast::http::response<boost::beast::http::string_body> res;
+      res.result(boost::beast::http::status::bad_request);
+      res.body() = "No valid sub-protocol was offered."
+        " This server implements"
+        " v12.stomp only!";
+      boost::beast::http::write(*raw_tcp_socket_ptr, res);
+    }
+    else
+    {
+      // Construct the stream, transferring ownership of the socket
+      web_socket_ptr = std::make_shared<
+        boost::beast::websocket::stream<boost::beast::tcp_stream>
+      >(std::move(*raw_tcp_socket_ptr));
 
-        // Accept the upgrade request
-        web_socket_ptr->accept(req);
-        read();
-      }
+      web_socket_ptr->set_option(
+        boost::beast::websocket::stream_base::decorator(
+          [protocol](boost::beast::http::response_header<>& hdr)
+          {
+            hdr.set(
+              boost::beast::http::field::sec_websocket_protocol,
+              protocol
+            );
+          }
+        ) //decorator
+      ); //set option
+
+      // Accept the upgrade request and start sync reading on STOMP web-socket
+      web_socket_ptr->accept(req);
+      read();
     }
   } // try
   catch (const std::exception& e)
@@ -171,8 +189,8 @@ void Session::read()
       if (ec)
       {
         self->logger->severe("WebSocket read failed!");
-        // self->logger->severe("error category: " + std::string(ec.category().name()));
-        // self->logger->severe("error value: " + std::to_string(ec.value()));
+        //self->logger->severe("error category: " + std::string(ec.category().name()));
+        //self->logger->severe("error value: " + std::to_string(ec.value()));
         self->logger->severe("error message: " + ec.message());
 
         // 여기서 오류 나면 더 이상 socker read를 지속해서는 안 된다.
@@ -198,9 +216,7 @@ void Session::read()
         self->web_socket_ptr->async_write(
           boost::asio::buffer(*connected_frame),
           [self, connected_frame, &is_disconnected](
-          const boost::system::error_code& ec,
-          std::size_t bytes_transferred
-        )
+          const boost::system::error_code& ec, std::size_t)
           {
             if (ec)
             {
@@ -209,13 +225,22 @@ void Session::read()
               );
               return;
             }
-            self->logger->info3("Response sent bytes: " + std::to_string(bytes_transferred));
             // 만약 DISCONNECT 요청이었다면, 현재 세션은 '삭제 예정 세션 맵'으로 이동해야 한다.
             if (is_disconnected)
             {
               self->is_shutdown.store(true);
+              if (self->web_socket_ptr != nullptr && self->web_socket_ptr->is_open())
+              {
+                self->web_socket_ptr->close(C::UNSET);
+              }
+              if (self->raw_tcp_socket_ptr != nullptr && self->raw_tcp_socket_ptr->is_open())
+              {
+                self->raw_tcp_socket_ptr->close();
+              }
+
               // TODO : implement later - 현재 세션이 구독했던 모든 토픽들에서 unscribe 해야 한다.
               self->parent_server.afterTerminationSession(self->getSessionId());
+              return;
             }
           }
         ); // async_write

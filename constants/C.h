@@ -12,6 +12,7 @@ namespace C
 
     // STOMP server urls & port
     constexpr int STOMP_PORT = 8080;
+    constexpr char STOMP_SERVER_END_POINT[] = "/gs-guide-websocket";
 
     // class names
     constexpr char MAIN[] = "main";

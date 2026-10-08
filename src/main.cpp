@@ -11,11 +11,11 @@
 
 /*
 구현 순서.
-
-1. 레디스 펍/섭 리스너 만들어서 '리스닝' 해보고 출력하기
+1. (완료) 레디스 펍/섭 리스너 만들어서 '리스닝' 해보고 출력하기
 2. 1 명의 클라이언트에게 웹소켓 연결 및 STOMP 프로토콜 제공 테스트(테스트용 클라이언트들과 호환 되게끔)
+        요청 검증, heart-beat 체크 및 전송, 토픽 구독/구독취소 등등
 3. Stomp server 내에서 세션 관리 방법 정하기
-3. 다수의 클라이언트에게 서버가 응답 전송하는 방법들 테스트
+4. 다수의 클라이언트에게 서버가 응답 전송하는 방법들 각각에 대해서 성능 테스트
     single threaded serial : 싱글 스레드로 응답 전송
     multi threaded serial : 멀티 스레드로 전송 but, 개별 스레드는 serial
     io_context base async : 모든 네트워킹 Tx/Rx 를 boost asio io_context에게 위임
@@ -55,19 +55,6 @@ int main()
     // used std::promise to synchronize the shutdown process
     std::promise<void> shutdownPromise;
     auto shutdownFuture = shutdownPromise.get_future();
-
-
-    // PeriodicTask 실행 테스트.
-    auto test_strand = boost::asio::make_strand(main_io_context);
-    PeriodicTask periodic_task(main_io_context, test_strand, std::chrono::milliseconds(1000));
-    periodic_task.setTask(
-        []()
-        {
-            std::cout << "Run PeriodicTask!\n";
-        });
-    periodic_task.start();
-    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-    periodic_task.stop();
 
     // redis conn 테스트.
     std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>();
