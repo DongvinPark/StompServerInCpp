@@ -107,7 +107,6 @@ void Session::start()
           boost::beast::websocket::stream<boost::beast::tcp_stream>
         >(std::move(*raw_tcp_socket_ptr));
 
-
         web_socket_ptr->set_option(
           boost::beast::websocket::stream_base::decorator(
             [protocol](boost::beast::http::response_header<>& hdr)
@@ -125,13 +124,15 @@ void Session::start()
         read();
       }
     }
-  }// try
+  } // try
   catch (const std::exception& e)
   {
-    logger->severe("Failed to set up STOMP connection ! : " + std::string(e.what()));
+    logger->severe("Failed to set up STOMP connection ! e.what() : " + std::string(e.what()));
+    parent_server.afterTerminationSession(session_id);
   } catch (...)
   {
     logger->severe("Failed to set up STOMP connection with unknown exception!");
+    parent_server.afterTerminationSession(session_id);
   }
 }
 
@@ -155,23 +156,23 @@ void Session::setStompHandler(const std::shared_ptr<StompHandler>& stomp_handler
   this->stomp_handler_ptr = stomp_handler_ptr;
 }
 
-
 void Session::read()
 {
   if (is_shutdown.load())
   {
+    logger->warning("Session was closed! Stopped socket reading");
     return;
   }
   auto self = shared_from_this();
   web_socket_ptr->async_read(
     read_buffer,
-    [self](const boost::system::error_code& ec, std::size_t bytes_transferred)
+    [self](const boost::system::error_code& ec, std::size_t)
     {
       if (ec)
       {
         self->logger->severe("WebSocket read failed!");
-        self->logger->severe("error category: " + std::string(ec.category().name()));
-        self->logger->severe("error value: " + std::to_string(ec.value()));
+        // self->logger->severe("error category: " + std::string(ec.category().name()));
+        // self->logger->severe("error value: " + std::to_string(ec.value()));
         self->logger->severe("error message: " + ec.message());
 
         // 여기서 오류 나면 더 이상 socker read를 지속해서는 안 된다.
@@ -186,42 +187,41 @@ void Session::read()
           self->read_buffer.data()
         );
 
-      self->logger->info3("req from client!");
-      self->logger->info3(req);
-
       bool is_disconnected = false;
       std::string res_frame = self->stomp_handler_ptr->handleStompReq(req, is_disconnected);
-      self->logger->info2("res for client!");
-      self->logger->info2(res_frame);
-      self->logger->severe("!!! is disconnected : " + std::to_string(is_disconnected));
+      if (res_frame != C::EMPTY_STR)
+      {
+        self->logger->info2(">>> res for client :");
+        self->logger->info2(res_frame);
 
-      // 이미 읽었으므로 버퍼를 비운다.
+        auto connected_frame = std::make_shared<std::string>(res_frame);
+        self->web_socket_ptr->async_write(
+          boost::asio::buffer(*connected_frame),
+          [self, connected_frame, &is_disconnected](
+          const boost::system::error_code& ec,
+          std::size_t bytes_transferred
+        )
+          {
+            if (ec)
+            {
+              self->logger->severe(
+                "WebSocket write failed: " + ec.message()
+              );
+              return;
+            }
+            self->logger->info3("Response sent bytes: " + std::to_string(bytes_transferred));
+            // 만약 DISCONNECT 요청이었다면, 현재 세션은 '삭제 예정 세션 맵'으로 이동해야 한다.
+            if (is_disconnected)
+            {
+              self->is_shutdown.store(true);
+              // TODO : implement later - 현재 세션이 구독했던 모든 토픽들에서 unscribe 해야 한다.
+              self->parent_server.afterTerminationSession(self->getSessionId());
+            }
+          }
+        ); // async_write
+      } //if (res_frame != C::EMPTY_STR)
+      // 어쨌건 버퍼는 다음 요청을 위해서 비운다.
       self->read_buffer.consume(self->read_buffer.size());
-
-      auto connected_frame = std::make_shared<std::string>(res_frame);
-      self->web_socket_ptr->async_write(
-        boost::asio::buffer(*connected_frame),
-        [self, connected_frame, &is_disconnected](
-        const boost::system::error_code& ec,
-        std::size_t bytes_transferred
-      )
-        {
-          if (ec)
-          {
-            self->logger->severe(
-              "WebSocket write failed: " + ec.message()
-            );
-            return;
-          }
-          self->logger->info3("Response sent bytes: " +std::to_string(bytes_transferred));
-          // 만약 DISCONNECT 요청이었다면, 현재 세션은 '삭제 예정 세션'으로 이동해야 한다.
-          if (is_disconnected)
-          {
-            self->is_shutdown.store(true);
-            self->parent_server.afterTerminationSession(self->getSessionId());
-          }
-        }
-      );// async_write
       boost::asio::post(self->strand, [self]() { self->read(); });
     }
   );
