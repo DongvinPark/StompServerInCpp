@@ -24,18 +24,10 @@ StompHandler::~StompHandler()
 */
 std::string StompHandler::handleStompReq(const std::string& req, bool& is_disconnected)
 {
-  if (
-    const char last = req.back();
-    last != C::STOMP_FRAME_NUL_OCTET
-  )
-  {
-    return C::EMPTY_STR;
-  }
-
   const std::vector<std::string> req_parts
     = Util::splitToVecBySingleChar(req, C::SINGLE_BACK_SLASH);
 
-  if (req_parts.size() <= 0)
+  if (req_parts.empty())
   {
     logger->severe("invalid req!");
     return C::EMPTY_STR;
@@ -54,7 +46,9 @@ std::string StompHandler::handleStompReq(const std::string& req, bool& is_discon
       std::string frame =
         "CONNECTED\n"
         "version:1.2\n"
-        "heart-beat:10000,10000\n"
+        "heart-beat:"
+        + std::to_string(C::HEART_BEAT_MS)
+        + "," + std::to_string(C::HEART_BEAT_MS) + "\n"
         "\n";
       frame.push_back(C::STOMP_FRAME_NUL_OCTET);
       return frame;
@@ -91,8 +85,8 @@ std::string StompHandler::handleStompReq(const std::string& req, bool& is_discon
     }
     else
     {
-      logger->severe("Not supporting STOMP method! : " + method);
-      return C::EMPTY_STR;
+      // 이때는 heart-beat 라고 봐야 한다.
+      return C::HEART_BEAT_RESULT;
     }
   }
   else

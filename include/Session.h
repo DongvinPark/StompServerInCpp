@@ -57,6 +57,12 @@ public:
 
   bool isShutDown();
 
+  void setShutdownTure();
+
+  int64_t getLatestHeartBeatTimeMillis();
+
+  void sendHeartBeatToClient();
+
   void setMsgBroker(const std::shared_ptr<MsgBroker>& msg_broker_ptr);
 
   void setStompHandler(const std::shared_ptr<StompHandler>& stomp_handler_ptr);
@@ -83,7 +89,9 @@ private:
   std::shared_ptr<StompHandler> stomp_handler_ptr = nullptr;
 
   long session_id;
+  std::atomic<bool> is_started{false};
   std::atomic<bool> is_shutdown{false};
+  int64_t heart_beat_time_millis{0L};
 };
 
 #endif //SESSION_H
