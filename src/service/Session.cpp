@@ -32,9 +32,6 @@ Session::~Session()
 {
     logger->severe("Session shuts down : " + std::to_string(session_id));
     setShutdownTrue();
-
-    // TODO : implement later - 현재 세션이 구독했던 모든 토픽들에서 unscribe 해야 한다.
-
     if (msg_broker_ptr != nullptr)
     {
         msg_broker_ptr = nullptr;
@@ -93,19 +90,21 @@ void Session::start()
         // validate incoming req
         if (!boost::beast::websocket::is_upgrade(req))
         {
-            // web socket 으로 업그레이드 해달라는 요청이 아님
+            // web socket 으로 업그레이드 해달라는 요청이 아닌 경우.
             logger->severe("Not a web socket upgrade req!");
             parent_server.afterTerminationSession(session_id);
             return;
         }
         if (req.method() != boost::beast::http::verb::get)
         {
+            // 최초 웹소켓 연결 요청은 http get 요청이어야 한다.
             logger->severe("Not a HTTP GET req!");
             parent_server.afterTerminationSession(session_id);
             return;
         }
         if (req.target() != C::STOMP_SERVER_END_POINT)
         {
+            // 현재 서버에서 지원하는 접속 URL이 아닌 경우.
             logger->severe("STOMP server endpoint not matches!");
             parent_server.afterTerminationSession(session_id);
             return;
@@ -163,12 +162,12 @@ void Session::start()
     }
 }
 
-long Session::getSessionId()
+long Session::getSessionId() const
 {
     return session_id;
 }
 
-bool Session::isShutDown()
+bool Session::isShutDown() const
 {
     return is_shutdown.load();
 }
@@ -179,12 +178,46 @@ void Session::setShutdownTrue()
     {
         return;
     }
+    // TODO : implement later - 현재 세션이 구독했던 모든 토픽들에서 unscribe 해야 한다.
     is_shutdown.store(true);
 }
 
-int64_t Session::getLatestHeartBeatTimeMillis()
+int64_t Session::getLatestHeartBeatTimeMillis() const
 {
     return heart_beat_time_millis;
+}
+
+void Session::sendMsgToClientViaMsgBroker(const std::string& msg)
+{
+    if (!isShutDown())
+    {
+        auto self = shared_from_this();
+        auto res_frame_ptr = std::make_shared<std::string>(msg);
+        boost::asio::post(
+            self->strand,
+            [self, res_frame_ptr]()
+            {
+                self->web_socket_ptr->async_write(
+                    boost::asio::buffer(*res_frame_ptr),
+                    [self, res_frame_ptr](const boost::system::error_code& ec, std::size_t)
+                    {
+                        if (ec)
+                        {
+                            self->logger->severe(
+                                "Msg TX to client failed: " + ec.message());
+                        }
+                    }
+                ); // async_write
+            }
+        );
+    }
+    else
+    {
+        logger->warning(
+            "MsgBroker TX failed! Session id : "
+            + std::to_string(getSessionId()) + " shutdown!"
+        );
+    }
 }
 
 void Session::sendHeartBeatToClient()
@@ -216,6 +249,52 @@ void Session::sendHeartBeatToClient()
             }
         );
     }
+    else
+    {
+        logger->warning(
+            "Heart-beat TX failed! Session id : "
+            + std::to_string(getSessionId()) + " shutdown!"
+        );
+    }
+}
+
+void Session::sendErrorFrameToClient()
+{
+    if (!isShutDown())
+    {
+        auto self = shared_from_this();
+        std::string frame =
+            "ERROR\n"
+            "receipt-id:" + std::to_string(session_id) + "\n"
+            "message:client sent malformed frame or internal server error\n"
+            "\n";
+        frame.push_back(C::STOMP_FRAME_NUL_OCTET);
+        auto res_frame_ptr = std::make_shared<std::string>(frame);
+        boost::asio::post(
+            self->strand,
+            [self, res_frame_ptr]()
+            {
+                self->web_socket_ptr->async_write(
+                    boost::asio::buffer(*res_frame_ptr),
+                    [self, res_frame_ptr](const boost::system::error_code& ec, std::size_t)
+                    {
+                        if (ec)
+                        {
+                            self->logger->severe(
+                                "Sending ERROR frame failed: " + ec.message());
+                        }
+                    }
+                ); // async_write
+            }
+        );
+    }
+    else
+    {
+        logger->warning(
+            "ERROR frame TX failed! Session id : "
+            + std::to_string(getSessionId()) + " shutdown!"
+        );
+    }
 }
 
 void Session::setMsgBroker(const std::shared_ptr<MsgBroker>& msg_broker_ptr)
@@ -245,8 +324,9 @@ void Session::read()
                 self->logger->severe("WebSocket read failed!");
                 self->logger->severe("error message: " + ec.message());
 
-                // 여기서 오류 나면 더 이상 socker read를 지속해서는 안 된다.
-                // 현재의 세션을 '삭제 예정 세션' 으로 이동시킨다.
+                // 여기서 오류 나면 더 이상 STOMP 세션을 지속해서는 안 된다.
+                // ERROR 프레임을 전송한 후, 현재의 세션을 '삭제 예정 세션' 으로 이동시킨다.
+                self->sendErrorFrameToClient();
                 self->setShutdownTrue();
                 self->parent_server.afterTerminationSession(self->getSessionId());
                 return;
@@ -255,25 +335,31 @@ void Session::read()
             const auto req = boost::beast::buffers_to_string(self->read_buffer.data());
             std::shared_ptr<bool> is_disconnected_ptr = std::make_shared<bool>(false);
             std::string res_frame = self->stomp_handler_ptr->handleStompReq(
-                req, is_disconnected_ptr);
+                req, is_disconnected_ptr
+            );
 
             if (res_frame == C::HEART_BEAT_RESULT)
             {
                 self->heart_beat_time_millis = Util::getCurrentTimeMillis();
+                res_frame = C::HEART_BEAT_STR;
             }
-            self->logger->info2(">>> res to client :");
-            self->logger->info2("\n" + res_frame);
+            // 하트비트 아닌 응답들만 출력한다.
+            if (res_frame != C::HEART_BEAT_STR && res_frame != C::HEART_BEAT_RESULT)
+            {
+                self->logger->info2(">>> res to client :");
+                self->logger->info2("\n" + res_frame);
+            }
 
             auto res_frame_ptr = std::make_shared<std::string>(res_frame);
             self->web_socket_ptr->async_write(
                 boost::asio::buffer(*res_frame_ptr),
                 [self, res_frame_ptr, is_disconnected_ptr]
-            (const boost::system::error_code& ec, std::size_t)
+            (const boost::system::error_code& ec_internal, std::size_t)
                 {
-                    if (ec)
+                    if (ec_internal)
                     {
                         self->logger->severe(
-                            "WebSocket write failed: " + ec.message()
+                            "WebSocket write failed: " + ec_internal.message()
                         );
                         return;
                     }
@@ -281,9 +367,6 @@ void Session::read()
                     if (*is_disconnected_ptr == true)
                     {
                         self->setShutdownTrue();
-
-                        // TODO : implement later - 현재 세션이 구독했던 모든 토픽들에서 unscribe 해야 한다.
-
                         self->parent_server.afterTerminationSession(self->getSessionId());
                         return;
                     }

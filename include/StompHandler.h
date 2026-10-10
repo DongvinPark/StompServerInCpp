@@ -8,24 +8,25 @@
 
 #include "../constants/C.h"
 #include "Logger.h"
-#include "Buffer.h"
 
 class Session;
 
 class StompHandler
 {
 public:
-  explicit StompHandler(
-    std::weak_ptr<Session> input_session_ptr
-  );
+    explicit StompHandler(
+        std::weak_ptr<Session> input_session_ptr
+    );
 
-  ~StompHandler();
+    ~StompHandler();
 
-  std::string handleStompReq(const std::string& req, std::shared_ptr<bool> is_disconnected_ptr);
+    std::string handleStompReq(
+        const std::string& req, const std::shared_ptr<bool>& is_disconnected_ptr
+    );
 
 private:
-  std::shared_ptr<Logger> logger;
-  std::weak_ptr<Session> parent_session_ptr;
+    std::shared_ptr<Logger> logger;
+    std::weak_ptr<Session> parent_session_ptr;
 };
 
 #endif //STOMPHANDLER_H

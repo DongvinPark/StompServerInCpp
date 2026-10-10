@@ -53,15 +53,19 @@ public:
 
   void start();
 
-  long getSessionId();
+  long getSessionId() const;
 
-  bool isShutDown();
+  bool isShutDown() const;
 
   void setShutdownTrue();
 
-  int64_t getLatestHeartBeatTimeMillis();
+  int64_t getLatestHeartBeatTimeMillis() const;
+
+  void sendMsgToClientViaMsgBroker(const std::string& msg);
 
   void sendHeartBeatToClient();
+
+  void sendErrorFrameToClient();
 
   void setMsgBroker(const std::shared_ptr<MsgBroker>& msg_broker_ptr);
 

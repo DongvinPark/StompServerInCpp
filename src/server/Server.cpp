@@ -14,7 +14,7 @@ Server::Server(
 ) : logger(Logger::getLogger(C::SERVER)),
     io_context(input_io_context),
     acceptor(input_io_context),
-    msg_broker_ptr(std::make_shared<MsgBroker>()),
+    msg_broker_ptr(std::make_shared<MsgBroker>(input_io_context)),
     remove_session_task(
         input_io_context,
         boost::asio::make_strand(input_io_context),

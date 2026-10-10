@@ -42,6 +42,7 @@ namespace C
     // general constants
     constexpr char EMPTY_STR[] = "";
     constexpr char HEART_BEAT_STR[] = "\n";
+    constexpr char HEART_BEAT_CMD[] = "HEART_BEAT";
     constexpr int INVALID = -1;
     constexpr int UNSET = -1;
     constexpr int CLOSED_SESSION_REMOVAL_INTERVAL_MS = 30'000;
