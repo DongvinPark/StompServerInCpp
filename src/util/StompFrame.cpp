@@ -1,5 +1,5 @@
 //
-// Created by user on 2026-10-10.
+// Created by 박동빈 on 2026-10-10.
 //
 #include "../include/StompFrame.h"
 #include "../constants/Util.h"
