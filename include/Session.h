@@ -71,6 +71,12 @@ public:
 
   void setStompHandler(const std::shared_ptr<StompHandler>& stomp_handler_ptr);
 
+  int incrementReceiptIdAndGet();
+
+  int getReceiptId() const;
+
+  void subscribeTopic(const std::string& topic);
+
 private:
   void read();
 
@@ -93,6 +99,7 @@ private:
   std::shared_ptr<StompHandler> stomp_handler_ptr = nullptr;
 
   long session_id;
+  int receipt_id{0};
   std::atomic<bool> is_started{false};
   std::atomic<bool> is_shutdown{false};
   int64_t heart_beat_time_millis{0L};

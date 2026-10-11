@@ -11,7 +11,7 @@
 
 #include "Session.h"
 
-class MsgBroker
+class MsgBroker : public std::enable_shared_from_this<MsgBroker>
 {
 public:
     explicit MsgBroker(boost::asio::io_context& input_io_context);
@@ -28,11 +28,13 @@ public:
 
     void unsubscribe(const std::string& topic, std::shared_ptr<Session> session_ptr);
 
-    uint32_t sendMsgToAllSesisons(const std::string& topic, const std::string& message);
+    int sendMsgToAllSesisons(const std::string& topic, const std::string& message);
 
     void deleteSession(long session_id);
 
 private:
+    void printMap();
+
     std::shared_ptr<Logger> logger;
     boost::asio::strand<boost::asio::io_context::executor_type> strand;
 
@@ -48,6 +50,8 @@ private:
             int, std::vector<std::shared_ptr<Session>>
         >
     > topic_session_map{};
+
+    std::atomic_int topic_sub_cnt{0};
 };
 
 #endif //MSGBROKER_H

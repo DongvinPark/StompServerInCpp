@@ -307,6 +307,23 @@ void Session::setStompHandler(const std::shared_ptr<StompHandler>& stomp_handler
     this->stomp_handler_ptr = stomp_handler_ptr;
 }
 
+int Session::incrementReceiptIdAndGet()
+{
+    this->receipt_id++;
+    return receipt_id;
+}
+
+int Session::getReceiptId() const
+{
+    return this->receipt_id;
+}
+
+void Session::subscribeTopic(const std::string& topic)
+{
+    auto self = shared_from_this();
+    msg_broker_ptr->subscribe(topic, self);
+}
+
 void Session::read()
 {
     if (is_shutdown.load())

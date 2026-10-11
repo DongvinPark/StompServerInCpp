@@ -21,6 +21,8 @@ public:
 
     [[nodiscard]] std::string getBody() const;
 
+    std::string getTopic(const char* header_key);
+
 private:
     std::string command{};
     std::unordered_map<std::string, std::string> headers{};

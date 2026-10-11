@@ -39,6 +39,9 @@ namespace C
     constexpr int REDIS_CONN_WAIT_TIMEOUT_SECONDS = 3;
     constexpr int REDIS_CONN_WAIT_TIMEOUT_MS = 3000;
 
+    // redis pub/sub channel
+    constexpr char PUB_SUB_DESTINATION[] = "/app/hello";
+
     // general constants
     constexpr char EMPTY_STR[] = "";
     constexpr char HEART_BEAT_STR[] = "\n";
@@ -49,6 +52,7 @@ namespace C
     constexpr int ONETIME_TASK_CLEAN_INTERVAL_MS = 30'000;
     constexpr char STOMP_FRAME_NUL_OCTET = '\0';
     constexpr char SINGLE_BACK_SLASH_CHAR = '\n';
+    constexpr int TOPIC_INDEX_SIZE = 10;
 
 }
 

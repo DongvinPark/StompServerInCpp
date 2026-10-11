@@ -57,12 +57,31 @@ std::string StompHandler::handleStompReq(
                 + "," + std::to_string(C::HEART_BEAT_MS) + "\n"
                 "\n";
             frame.push_back(C::STOMP_FRAME_NUL_OCTET);
+            ptr_for_parent_session->incrementReceiptIdAndGet();
             return frame;
         }
         else if (command == "SUBSCRIBE")
         {
-            // TODO : implement later
-            return C::HEART_BEAT_STR;
+            std::string topic = stomp_frame.getTopic("destination");
+            if (topic == C::EMPTY_STR) // Bad Request 다.
+            {
+                std::string frame =
+                    "ERROR\n"
+                    "receipt-id:"
+                    + std::to_string(ptr_for_parent_session->getSessionId()) + "\n"
+                    "message:client sent malformed frame\n"
+                    "\n";
+                frame.push_back(C::STOMP_FRAME_NUL_OCTET);
+                return frame;
+            }
+            ptr_for_parent_session->subscribeTopic(topic);
+            int receipt_id = ptr_for_parent_session->incrementReceiptIdAndGet();
+            std::string frame =
+                "RECEIPT\n"
+                "receipt-id:" + std::to_string(receipt_id) + "\n"
+                "\n";
+            frame.push_back(C::STOMP_FRAME_NUL_OCTET);
+            return frame;
         }
         else if (command == "UNSUBSCRIBE")
         {

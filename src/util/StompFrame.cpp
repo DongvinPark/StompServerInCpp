@@ -156,3 +156,19 @@ std::string StompFrame::getBody() const
 {
     return body;
 }
+
+std::string StompFrame::getTopic(const char* header_key)
+{
+    if (headers.empty())
+    {
+        return C::EMPTY_STR;
+    }
+
+    if (headers.contains(header_key))
+    {
+        return headers.at(header_key);
+    } else
+    {
+        return C::EMPTY_STR;
+    }
+}
