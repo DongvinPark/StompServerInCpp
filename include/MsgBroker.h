@@ -24,7 +24,9 @@ public:
 
     ~MsgBroker();
 
-    void subscribe(const std::string& topic, std::shared_ptr<Session> session_ptr);
+    void subscribe(
+        const std::string& topic, const std::string& id_str, std::shared_ptr<Session> session_ptr
+    );
 
     void unsubscribe(
         std::shared_ptr<Session> session_ptr, TopicInfo topic_info

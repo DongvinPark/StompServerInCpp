@@ -16,13 +16,13 @@ MsgBroker::~MsgBroker()
     topic_session_map.clear();
 }
 
-void MsgBroker::subscribe(const std::string& topic, std::shared_ptr<Session> session_ptr)
+void MsgBroker::subscribe(const std::string& topic, const std::string& id_str, std::shared_ptr<Session> session_ptr)
 {
     // boost asio strand를 써서 data race를 방지한다.
     auto self = shared_from_this();
     boost::asio::post(
         self->strand,
-        [self, topic, session_ptr]()
+        [self, topic, id_str, session_ptr]()
         {
             // 인덱스 계산.
             ++self->topic_sub_cnt;
@@ -33,7 +33,7 @@ void MsgBroker::subscribe(const std::string& topic, std::shared_ptr<Session> ses
             // std::unordered_map 의 기본 생성 동작이 JAVA의 put-if-absent 처럼 작동하기 때문이다.
             auto& ptr_vec = self->topic_session_map[topic][idx];
             ptr_vec.push_back(session_ptr);
-            session_ptr->addTopicInfo(topic, idx);
+            session_ptr->addTopicInfo(topic, id_str, idx);
             //self->printMap(); // 개발 & 체크용.
             /*
             if (self->topic_session_map.contains(topic)) // 토픽이 이미 있나?
@@ -120,7 +120,7 @@ void MsgBroker::deleteSession(std::shared_ptr<Session> session_ptr)
                 "Deleted session in MsgBroker. session id : "
                 + std::to_string(session_ptr->getSessionId())
             );
-            //self->printMap(); // 개발 & 체크용.
+            self->printMap(); // 개발 & 체크용.
         }
     );
 }

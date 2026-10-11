@@ -62,20 +62,20 @@ std::string StompHandler::handleStompReq(
         }
         else if (command == "SUBSCRIBE")
         {
-            std::string topic = stomp_frame.getTopic("destination");
-            if (topic == C::EMPTY_STR) // Bad Request 다.
+            std::string topic = stomp_frame.getValueFromHeaderMap("destination");
+            std::string id_str = stomp_frame.getValueFromHeaderMap("id");
+            int receipt_id = ptr_for_parent_session->incrementReceiptIdAndGet();
+            if (topic == C::EMPTY_STR || id_str == C::EMPTY_STR) // Bad Request 다.
             {
                 std::string frame =
                     "ERROR\n"
-                    "receipt-id:"
-                    + std::to_string(ptr_for_parent_session->getSessionId()) + "\n"
+                    "receipt-id:" + std::to_string(receipt_id) + "\n"
                     "message:client sent malformed frame\n"
                     "\n";
                 frame.push_back(C::STOMP_FRAME_NUL_OCTET);
                 return frame;
             }
-            ptr_for_parent_session->subscribeTopic(topic);
-            int receipt_id = ptr_for_parent_session->incrementReceiptIdAndGet();
+            ptr_for_parent_session->subscribeTopic(topic, id_str);
             std::string frame =
                 "RECEIPT\n"
                 "receipt-id:" + std::to_string(receipt_id) + "\n"
@@ -85,8 +85,25 @@ std::string StompHandler::handleStompReq(
         }
         else if (command == "UNSUBSCRIBE")
         {
-            // TODO : implement later
-            return C::HEART_BEAT_STR;
+            std::string id_str = stomp_frame.getValueFromHeaderMap("id");
+            int receipt_id = ptr_for_parent_session->incrementReceiptIdAndGet();
+            if (id_str == C::EMPTY_STR)
+            {
+                std::string frame =
+                    "ERROR\n"
+                    "receipt-id:" + std::to_string(receipt_id) + "\n"
+                    "message:client sent malformed frame\n"
+                    "\n";
+                frame.push_back(C::STOMP_FRAME_NUL_OCTET);
+                return frame;
+            }
+            ptr_for_parent_session->unsubscribeTopic(id_str);
+            std::string frame =
+                "RECEIPT\n"
+                "receipt-id:" + std::to_string(receipt_id) + "\n"
+                "\n";
+            frame.push_back(C::STOMP_FRAME_NUL_OCTET);
+            return frame;
         }
         else if (command == "SEND")
         {

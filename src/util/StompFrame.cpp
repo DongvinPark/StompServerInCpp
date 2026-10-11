@@ -157,7 +157,7 @@ std::string StompFrame::getBody() const
     return body;
 }
 
-std::string StompFrame::getTopic(const char* header_key)
+std::string StompFrame::getValueFromHeaderMap(const char* header_key)
 {
     if (headers.empty())
     {

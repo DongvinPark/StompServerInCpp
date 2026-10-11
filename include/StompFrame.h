@@ -21,7 +21,7 @@ public:
 
     [[nodiscard]] std::string getBody() const;
 
-    std::string getTopic(const char* header_key);
+    std::string getValueFromHeaderMap(const char* header_key);
 
 private:
     std::string command{};

@@ -76,9 +76,11 @@ public:
 
   int getReceiptId() const;
 
-  void subscribeTopic(const std::string& topic);
+  void subscribeTopic(const std::string& topic, const std::string& id_str);
 
-  void addTopicInfo(const std::string& topic, int idx);
+  void unsubscribeTopic(const std::string& id_str);
+
+  void addTopicInfo(const std::string& topic, const std::string& id_str, int idx);
 
   const std::vector<TopicInfo>& getTopicInfoList();
 

@@ -11,6 +11,7 @@ class TopicInfo
 {
 public:
     std::string topic;
+    std::string id_str;
     int idx;
     long session_id;
 };

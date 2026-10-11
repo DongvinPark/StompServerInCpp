@@ -312,16 +312,36 @@ int Session::getReceiptId() const
     return this->receipt_id;
 }
 
-void Session::subscribeTopic(const std::string& topic)
+void Session::subscribeTopic(const std::string& topic, const std::string& id_str)
 {
     auto self = shared_from_this();
-    msg_broker_ptr->subscribe(topic, self);
+    msg_broker_ptr->subscribe(topic, id_str, self);
 }
 
-void Session::addTopicInfo(const std::string& topic, const int idx)
+void Session::unsubscribeTopic(const std::string& id_str)
+{
+    TopicInfo topic_info;
+    for (const auto& info : topic_info_vec)
+    {
+        if (info.id_str == id_str)
+        {
+            topic_info.topic = info.topic;
+            topic_info.id_str = info.id_str;
+            topic_info.session_id = session_id;
+            topic_info.idx = info.idx;
+            break;
+        }
+    }
+    std::erase(topic_info_vec, topic_info);
+    auto self = shared_from_this();
+    msg_broker_ptr->unsubscribe(self, topic_info);
+}
+
+void Session::addTopicInfo(const std::string& topic, const std::string& id_str, const int idx)
 {
     TopicInfo info;
     info.topic = topic;
+    info.id_str = id_str;
     info.idx = idx;
     info.session_id = getSessionId();
     this->topic_info_vec.emplace_back(info);
