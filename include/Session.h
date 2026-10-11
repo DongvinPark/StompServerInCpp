@@ -9,8 +9,9 @@
 #include <boost/beast.hpp>
 #include <memory>
 
-#include "Logger.h"
-#include "StompHandler.h"
+#include "../include/Logger.h"
+#include "../include/StompHandler.h"
+#include "../include/TopicInfo.h"
 
 using boost::asio::ip::tcp;
 
@@ -77,6 +78,10 @@ public:
 
   void subscribeTopic(const std::string& topic);
 
+  void addTopicInfo(const std::string& topic, int idx);
+
+  const std::vector<TopicInfo>& getTopicInfoList();
+
 private:
   void read();
 
@@ -103,6 +108,7 @@ private:
   std::atomic<bool> is_started{false};
   std::atomic<bool> is_shutdown{false};
   int64_t heart_beat_time_millis{0L};
+  std::vector<TopicInfo> topic_info_vec{};
 };
 
 #endif //SESSION_H

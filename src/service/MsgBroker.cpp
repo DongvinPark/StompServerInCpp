@@ -33,7 +33,8 @@ void MsgBroker::subscribe(const std::string& topic, std::shared_ptr<Session> ses
             // std::unordered_map 의 기본 생성 동작이 JAVA의 put-if-absent 처럼 작동하기 때문이다.
             auto& ptr_vec = self->topic_session_map[topic][idx];
             ptr_vec.push_back(session_ptr);
-            // self->printMap(); // 개발 & 체크용.
+            session_ptr->addTopicInfo(topic, idx);
+            //self->printMap(); // 개발 & 체크용.
             /*
             if (self->topic_session_map.contains(topic)) // 토픽이 이미 있나?
             {
@@ -66,9 +67,34 @@ void MsgBroker::subscribe(const std::string& topic, std::shared_ptr<Session> ses
     );
 }
 
-void MsgBroker::unsubscribe(const std::string& topic, std::shared_ptr<Session> session_ptr)
+void MsgBroker::unsubscribe(
+    std::shared_ptr<Session> session_ptr, TopicInfo topic_info
+)
 {
     // boost asio strand를 써서 data race를 방지한다.
+    auto self = shared_from_this();
+    boost::asio::post(
+        self->strand,
+        [self, topic_info, session_ptr]()
+        {
+            if (!self->topic_session_map.contains(topic_info.topic)) return;
+            auto& idx_ptr_map = self->topic_session_map[topic_info.topic];
+            auto& ptr_vec = idx_ptr_map[topic_info.idx];
+            std::erase(ptr_vec, session_ptr);
+
+            // ptr_vec 이 비어 있다면, idx_ptr_map 에서도 삭제.
+            if (ptr_vec.empty())
+            {
+                idx_ptr_map.erase(topic_info.idx);
+            }
+
+            // 삭제 결과 idx_ptr_map 도 비어 있다면 토픽 자체를 삭제.
+            if (idx_ptr_map.empty())
+            {
+                self->topic_session_map.erase(topic_info.topic);
+            }
+        }
+    );
 }
 
 /**
@@ -79,10 +105,24 @@ int MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string&
     return C::INVALID;
 }
 
-void MsgBroker::deleteSession(long session_id)
+void MsgBroker::deleteSession(std::shared_ptr<Session> session_ptr)
 {
-    // TODO : 세션을 제거 했을 때의 동작을 여기에 정의해야 한다. 제거한 세션이 구독한거 전부 취소 한다던지.
-    // boost asio strand를 써서 data race를 방지한다.
+    // boost asio strand를 써서 data race를 방지한다. 현재 세션의 구독 정보를 전체 삭제한다.
+    auto self = shared_from_this();
+    boost::asio::post(
+        self->strand, [self, session_ptr]()
+        {
+            for (const auto& info : session_ptr->getTopicInfoList())
+            {
+                self->unsubscribe(session_ptr, info);
+            }
+            self->logger->warning(
+                "Deleted session in MsgBroker. session id : "
+                + std::to_string(session_ptr->getSessionId())
+            );
+            //self->printMap(); // 개발 & 체크용.
+        }
+    );
 }
 
 inline void MsgBroker::printMap()
@@ -95,27 +135,27 @@ inline void MsgBroker::printMap()
         {
             std::cout << "\n========== Topic Session Map ==========\n";
             std::cout << "Total topics: "
-                      << self->topic_session_map.size() << '\n';
+                << self->topic_session_map.size() << '\n';
 
             for (const auto& [topic, idx_ptr_map]
                  : self->topic_session_map)
             {
                 std::cout << "\nTopic: " << topic << '\n';
                 std::cout << "  Index buckets: "
-                          << idx_ptr_map.size() << '\n';
+                    << idx_ptr_map.size() << '\n';
 
                 for (const auto& [idx, session_vec] : idx_ptr_map)
                 {
                     std::cout << "  Index: " << idx
-                              << " | Sessions: "
-                              << session_vec.size() << '\n';
+                        << " | Sessions: "
+                        << session_vec.size() << '\n';
 
                     for (const auto& session_ptr : session_vec)
                     {
                         if (session_ptr)
                         {
                             std::cout << "    Session address: "
-                                      << session_ptr.get() << '\n';
+                                << session_ptr.get() << '\n';
                         }
                         else
                         {

@@ -133,10 +133,7 @@ void Server::afterTerminationSession(const long session_id)
     // C++20 부터는 if (map.find(session_id) != map.end()){...} 이렇게 안 해도 된다.
     if (session_id_map.contains(session_id))
     {
-        // 메시지 브록커에서 먼저 제거한다.
-        msg_broker_ptr->deleteSession(session_id);
-
-        // 그 후 '삭제 예정인 세션 맵'으로 이동시킨다.
+        // '삭제 예정인 세션 맵'으로 이동시킨다.
         if (
             auto sessionPtr = session_id_map[session_id];
             sessionPtr != nullptr

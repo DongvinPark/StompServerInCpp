@@ -26,11 +26,13 @@ public:
 
     void subscribe(const std::string& topic, std::shared_ptr<Session> session_ptr);
 
-    void unsubscribe(const std::string& topic, std::shared_ptr<Session> session_ptr);
+    void unsubscribe(
+        std::shared_ptr<Session> session_ptr, TopicInfo topic_info
+    );
 
     int sendMsgToAllSesisons(const std::string& topic, const std::string& message);
 
-    void deleteSession(long session_id);
+    void deleteSession(std::shared_ptr<Session> session_ptr);
 
 private:
     void printMap();

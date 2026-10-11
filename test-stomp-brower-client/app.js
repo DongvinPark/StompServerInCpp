@@ -50,7 +50,7 @@ function sendName() {
         destination: "/app/hello",
         body: JSON.stringify({
             'name': $("#name").val(),
-            'clientSendTime': timestamp // 이 필드를 추가합니다.
+            'clientSendTime': timestamp // 이 필드를 추가한다.
         })
     });
 

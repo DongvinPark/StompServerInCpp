@@ -81,6 +81,7 @@ add_executable(StompServerInCpp
         src/service/Session.cpp
         include/StompFrame.h
         src/util/StompFrame.cpp
+        include/TopicInfo.h
 )
 
 if (MSVC)

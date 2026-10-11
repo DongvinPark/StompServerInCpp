@@ -32,14 +32,6 @@ Session::~Session()
 {
     logger->severe("Session shuts down : " + std::to_string(session_id));
     setShutdownTrue();
-    if (msg_broker_ptr != nullptr)
-    {
-        msg_broker_ptr = nullptr;
-    }
-    if (stomp_handler_ptr != nullptr)
-    {
-        stomp_handler_ptr = nullptr;
-    }
 }
 
 void Session::start()
@@ -178,7 +170,9 @@ void Session::setShutdownTrue()
     {
         return;
     }
-    // TODO : implement later - 현재 세션이 구독했던 모든 토픽들에서 unscribe 해야 한다.
+    const auto self = shared_from_this();
+    // 제거 예정인 세션은 최대한 빨리 msg broker에서 삭제 해주는게 좋다.
+    msg_broker_ptr->deleteSession(self);
     is_shutdown.store(true);
 }
 
@@ -322,6 +316,20 @@ void Session::subscribeTopic(const std::string& topic)
 {
     auto self = shared_from_this();
     msg_broker_ptr->subscribe(topic, self);
+}
+
+void Session::addTopicInfo(const std::string& topic, const int idx)
+{
+    TopicInfo info;
+    info.topic = topic;
+    info.idx = idx;
+    info.session_id = getSessionId();
+    this->topic_info_vec.emplace_back(info);
+}
+
+const std::vector<TopicInfo>& Session::getTopicInfoList()
+{
+    return this->topic_info_vec;
 }
 
 void Session::read()
