@@ -320,6 +320,7 @@ void Session::subscribeTopic(const std::string& topic, const std::string& id_str
 
 void Session::unsubscribeTopic(const std::string& id_str)
 {
+  // 제거 대상 요소를 가리키는 반복자를 찾아낸다.
   const auto it = std::ranges::find_if(
     topic_info_vec,
     [&id_str](const TopicInfo& info)
@@ -330,6 +331,7 @@ void Session::unsubscribeTopic(const std::string& id_str)
 
   if (it == topic_info_vec.end()) { return; }
 
+  // 반복자로 얻어낸 제거 대상 요소를 std::erase_if()를 써서 실제로 삭제한다.
   const TopicInfo& topic_info = *it;
   std::erase_if(
     topic_info_vec,
@@ -339,6 +341,7 @@ void Session::unsubscribeTopic(const std::string& id_str)
     }
   );
 
+  // MsgBroker에서도 삭제한다.
   auto self = shared_from_this();
   msg_broker_ptr->unsubscribe(self, topic_info);
 }
