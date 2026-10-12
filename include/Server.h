@@ -38,9 +38,6 @@ private:
   boost::beast::net::ip::tcp::acceptor acceptor;
   std::shared_ptr<MsgBroker> msg_broker_ptr;
 
-  // TODO : 만들어진(==live) session 들을 어떻게 저장하고 있을 것인가?
-
-
   std::unordered_map<long, std::shared_ptr<Session>> session_id_map{};
   // shutdown 된 세션들은 별도의 맵에 모아뒀다가
   // 별도의 periodic task로 주기적으로(ex : 30 sec) 제거한다. 그래야 SIGABRT 에러 피할 수 있다.
