@@ -107,8 +107,28 @@ std::string StompHandler::handleStompReq(
         }
         else if (command == "SEND")
         {
-            // TODO : implement later
-            return C::HEART_BEAT_STR;
+            // 본 프로젝트는 성능 테스트용 프로젝트이므로 STOMP 프로토콜을 완벽하게 구현하지 않으며,
+            // SEND 명령은 오직 1 명만 존재하는 Artist 클라이언트만 보낼 수 있다.
+            std::string destination = stomp_frame.getValueFromHeaderMap("destination");
+            int receipt_id = ptr_for_parent_session->incrementReceiptIdAndGet();
+            if (destination == C::EMPTY_STR)
+            {
+                std::string frame =
+                    "ERROR\n"
+                    "receipt-id:" + std::to_string(receipt_id) + "\n"
+                    "message:client sent malformed frame\n"
+                    "\n";
+                frame.push_back(C::STOMP_FRAME_NUL_OCTET);
+                return frame;
+            }
+            const std::string payload = stomp_frame.getBody();
+            ptr_for_parent_session->pubMsgToRedisViaMsgBroker(payload);
+            std::string frame =
+                "RECEIPT\n"
+                "receipt-id:" + std::to_string(receipt_id) + "\n"
+                "\n";
+            frame.push_back(C::STOMP_FRAME_NUL_OCTET);
+            return frame;
         }
         /*  서버는 SEND로 받은 메시지를 타킷 클라이언트들한테 전송할 때, MESSAGE 메서드를 사용한다.
          *  클라이언트가 MESSAGE 메서드로 요청을 하는 경우는 없다.

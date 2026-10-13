@@ -32,6 +32,8 @@ public:
 
     void setRedisPublishCallback(RedisPublishCallback callback);
 
+    void txMsgToRedisPubSubChannel(const std::string& msg);
+
     void subscribe(
         const std::string& topic, const std::string& id_str, std::shared_ptr<Session> session_ptr
     );

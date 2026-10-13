@@ -23,6 +23,11 @@ void MsgBroker::setRedisPublishCallback(
   redis_publish_callback = std::move(callback);
 }
 
+void MsgBroker::txMsgToRedisPubSubChannel(const std::string& msg)
+{
+  redis_publish_callback(msg);
+}
+
 void MsgBroker::subscribe(
   const std::string& topic,
   const std::string& id_str,
@@ -81,16 +86,17 @@ void MsgBroker::unsubscribe(
 }
 
 /**
- * 메시지를 전송한 세션의 개수를 리턴한다.
+ * 성능 테스트용 프로젝트이므로, STOMP 프로토콜을 완벽하게 구현하지는 않는다.<br/>
+ * 테스트의 편리성을 위해 topic 이 단 1 개 분이며, 모든 클라이언트들이 이 topic을 구독하고 있다.
  */
 void MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string& message)
 {
-  // 여기에서 어떻게 RedisServic.h 내의 pub 관련 함수를 호출할 것인가?
+  // TODO : implement later
+  //  여기에서 void Session::sendMsgToClientViaMsgBroker(const std::string& msg){...} 를 호출한다.
+
+  // 이거는 그냥 테스트용.
   std::cout << "Pub/Sub channel Listening in MsgBroker success! : " << topic
                     << ": " << message << "\n";
-
-  std::cout << "!!! test redis pub callback start !!!\n";
-  // redis_publish_callback("!!! test pub !!!"); 테스트 결과 성공했다 굿굿.
 }
 
 void MsgBroker::deleteSession(std::shared_ptr<Session> session_ptr)

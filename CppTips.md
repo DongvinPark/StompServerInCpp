@@ -927,6 +927,38 @@ void MsgBroker::subscribe(
   );
 }  
 ```
+<br><br/>
+10. C++ 과 의존성 분리
+- JAVA Spring 에서 지긋지긋하게 들어봤을 '의존성 분리', 'Dependency Injection' 문제는 C++ 에서도 발생한다.
+- 이번 프로젝트에서는 RedisService.h 에서 이와 관련된 문제가 발생했다.
+- 자세한 설명은 아래의 코드에서 설명하였다.
+```c++
+/*
+*  본 프로젝트에서는 boost::redis 를 활용하였다.
+* 해당 라이브러리를 활용하기 위해서는 아래의 두 가지 헤더가 임포트 돼야 한다.
+* #include <boost/redis.hpp>
+* #include <boost/redis/src.hpp>
+* 
+* 그런데 중요한 점은 이러한 임포트가 프로젝트 전체에 결쳐서 단 1 번만 등장해야 한다는 점이다.
+* 이러한 임포트 문을 가지고 있는 RedisService.h 를 다른 클래스(예를 들면 MsgBroker.h & .cpp 같은)에서
+* #include "../src/redis/RedisService.h" 같이 임포트 되는 순간
+* '... duplicate symbol ...' 어쩌고 하는 긴 에러 로그가 출련되면서 빌드에 실패한다.
+* 그래서 RedisService.h 는 유일하게 .cpp 없이 .h 안에 모든 구현이 들어가 있다.
+
+* 문제는 RedisService.h 의 멤버함수를 다른 클래스에서도 쓸 수 있어야 한다는 점이었다. 
+* 즉, MsgBroker 가 RedisService 의 존재를 몰라도 RedisService의 멤버 함수를 호출해야 한다는 점에서
+* 의존성 분리가 필요했던 것이다.
+* 
+* 크게 두 가지 방법이 사용될 수 있다.
+* 1. RedisService의 멤버 함수를 콜백 객체로 만들어서 MsgBroker에게 전달
+* 2. RedisService 가 abstract class 를 오버라이드 하게 만든 후, 해당 클래스를 MsgBroker에 참조로서 초기화
+*/
+
+// 본 프로젝트에서는 1. 번 방법이 사용됐다. RedisService 내부에서 외부의 호출이 가능해야 하는 멤버 함수가
+// 1, 2 개로 적었기 때문이다. 2. 번 방법의 abstract class는 결국 자바의 interface 처럼 작동한다.
+
+// 자세한 구현은 MsgBroker 와 main.cpp 의 코드를 참조하길 바란다.
+```
 
 
 

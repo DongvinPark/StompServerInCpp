@@ -96,6 +96,7 @@ public:
 
       boost::redis::request req;
       std::string cmd = "PUBLISH";
+      // 성능 테스트용 프로젝트이므로, Redis Pub/Sub 채널은 src/include/C.h 에 정의된 것 단 1 개 뿐이다.
       req.push(cmd, C::REDIS_PUB_SUB_CHANNEL, msg);
 
       boost::redis::response<std::string> resp;

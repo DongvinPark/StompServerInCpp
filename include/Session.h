@@ -49,6 +49,8 @@ public:
 
   int64_t getLatestHeartBeatTimeMillis() const;
 
+  void pubMsgToRedisViaMsgBroker(const std::string& msg);
+
   void sendMsgToClientViaMsgBroker(const std::string& msg);
 
   void sendHeartBeatToClient();

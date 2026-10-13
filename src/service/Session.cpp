@@ -181,6 +181,11 @@ int64_t Session::getLatestHeartBeatTimeMillis() const
   return heart_beat_time_millis;
 }
 
+void Session::pubMsgToRedisViaMsgBroker(const std::string& msg)
+{
+  msg_broker_ptr->txMsgToRedisPubSubChannel(msg);
+}
+
 void Session::sendMsgToClientViaMsgBroker(const std::string& msg)
 {
   if (!isShutDown())
