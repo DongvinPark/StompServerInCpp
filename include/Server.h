@@ -22,7 +22,8 @@ class Server
 {
 public:
   explicit Server(
-    boost::asio::io_context& input_io_context
+    boost::asio::io_context& input_io_context,
+    std::shared_ptr<MsgBroker> input_msg_broker_ptr
   );
 
   ~Server();

@@ -5,16 +5,18 @@
 
 #include <ranges>
 #include <iostream>
+#include <utility>
 
 #include "../../constants/Util.h"
 
 
 Server::Server(
-    boost::asio::io_context& input_io_context
+    boost::asio::io_context& input_io_context,
+    std::shared_ptr<MsgBroker> input_msg_broker_ptr
 ) : logger(Logger::getLogger(C::SERVER)),
     io_context(input_io_context),
     acceptor(input_io_context),
-    msg_broker_ptr(std::make_shared<MsgBroker>(input_io_context)),
+    msg_broker_ptr(input_msg_broker_ptr),
     remove_session_task(
         input_io_context,
         boost::asio::make_strand(input_io_context),

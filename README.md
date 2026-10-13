@@ -66,6 +66,6 @@ grep BOOST_LIB_VERSION /usr/local/include/boost/version.hpp
   - 아래의 명령어를 실행해서 간단한 http 서버를 실행하고, browser 에서 http://localhost:3000 으로 접속합니다.
   - 포트 번호가 일치해야 합니다.
 ```text
-python3 -m http server -p 3000
+python3 -m http server 3000
 ```
 

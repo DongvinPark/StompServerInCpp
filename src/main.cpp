@@ -56,9 +56,24 @@ int main()
     std::promise<void> shutdownPromise;
     auto shutdownFuture = shutdownPromise.get_future();
 
+    // MsgBroker 초기화
+    std::shared_ptr<MsgBroker> msgBroker_ptr = std::make_shared<MsgBroker>(main_io_context);
+
     // redis conn 테스트.
-    std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>();
+    std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>(msgBroker_ptr);
     redis_service_ptr->init();
+
+    // 콜백 등록 : 순환 참조 방지를 위해서 weak ptr 쓴다.
+    std::weak_ptr<RedisService> weak_redis_ptr = redis_service_ptr;
+    msgBroker_ptr->setRedisPublishCallback(
+        [weak_redis_ptr](const std::string& message)
+        {
+            if (auto redis = weak_redis_ptr.lock())
+            {
+                redis->publishMsg(message);
+            }
+        }
+    );
 
     // 레디스 Ping 테스트
     redis_service_ptr->verifyRedisConnection();
@@ -70,11 +85,7 @@ int main()
         redis_service_ptr->startPubSubListening();
     }).detach();
 
-    // Redis Pub/Sub channel 에 메시지 퍼블리시 테스트
-    /*std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    redis_service_ptr->publishMsg("Test Msg Pub to Redis by main!");*/
-
-    Server server(main_io_context);
+    Server server(main_io_context, msgBroker_ptr);
     Util::delayedExecutorAsyncByThread(
         0, [&server] { server.start(); }
     );
@@ -91,12 +102,7 @@ int main()
             {
                 std::cout << "\n\t>>> Received signal: " << signal << ". Stopping server...\n";
                 workGuard.reset();
-
-                if (!main_io_context.stopped())
-                {
-                    main_io_context.stop();
-                }
-
+                if (!main_io_context.stopped()) { main_io_context.stop(); }
                 std::cout << "\t>>> all io_context stopped.\n";
                 shutdownPromise.set_value();
             }

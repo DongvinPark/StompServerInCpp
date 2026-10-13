@@ -16,6 +16,13 @@ MsgBroker::~MsgBroker()
   topic_session_map.clear();
 }
 
+void MsgBroker::setRedisPublishCallback(
+    RedisPublishCallback callback
+)
+{
+  redis_publish_callback = std::move(callback);
+}
+
 void MsgBroker::subscribe(
   const std::string& topic,
   const std::string& id_str,
@@ -76,9 +83,14 @@ void MsgBroker::unsubscribe(
 /**
  * 메시지를 전송한 세션의 개수를 리턴한다.
  */
-int MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string& message)
+void MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string& message)
 {
-  return C::INVALID;
+  // 여기에서 어떻게 RedisServic.h 내의 pub 관련 함수를 호출할 것인가?
+  std::cout << "Pub/Sub channel Listening in MsgBroker success! : " << topic
+                    << ": " << message << "\n";
+
+  std::cout << "!!! test redis pub callback start !!!\n";
+  // redis_publish_callback("!!! test pub !!!"); 테스트 결과 성공했다 굿굿.
 }
 
 void MsgBroker::deleteSession(std::shared_ptr<Session> session_ptr)

@@ -9,7 +9,13 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Session.h"
+// RedisService.h 를 포함하지 않고 그 안의 멤버 함수를 호출할 수 있게 만들기 위해서다. 함수 포인터 전달인 것.
+#include <functional>
+
+#include "../include/Session.h"
+
+using RedisPublishCallback =
+    std::function<void(const std::string&)>;
 
 class MsgBroker : public std::enable_shared_from_this<MsgBroker>
 {
@@ -24,6 +30,8 @@ public:
 
     ~MsgBroker();
 
+    void setRedisPublishCallback(RedisPublishCallback callback);
+
     void subscribe(
         const std::string& topic, const std::string& id_str, std::shared_ptr<Session> session_ptr
     );
@@ -32,7 +40,7 @@ public:
         std::shared_ptr<Session> session_ptr, TopicInfo topic_info
     );
 
-    int sendMsgToAllSesisons(const std::string& topic, const std::string& message);
+    void sendMsgToAllSesisons(const std::string& topic, const std::string& message);
 
     void deleteSession(std::shared_ptr<Session> session_ptr);
 
@@ -41,6 +49,8 @@ private:
 
     std::shared_ptr<Logger> logger;
     boost::asio::strand<boost::asio::io_context::executor_type> strand;
+
+    RedisPublishCallback redis_publish_callback;
 
     /**
      * topic 스트링 : map<br/>
