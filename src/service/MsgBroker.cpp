@@ -87,12 +87,13 @@ void MsgBroker::unsubscribe(
 
 /**
  * 성능 테스트용 프로젝트이므로, STOMP 프로토콜을 완벽하게 구현하지는 않는다.<br/>
- * 테스트의 편리성을 위해 topic 이 단 1 개 분이며, 모든 클라이언트들이 이 topic을 구독하고 있다.
+ * 테스트의 편리성을 위해 topic 이 단 1 개 뿐이며, 모든 클라이언트들이 이 topic을 구독하고 있다.
  */
 void MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string& message)
 {
   // TODO : implement later
   //  여기에서 void Session::sendMsgToClientViaMsgBroker(const std::string& msg){...} 를 호출한다.
+
 
   // 이거는 그냥 테스트용.
   std::cout << "Pub/Sub channel Listening in MsgBroker success! : " << topic
