@@ -184,7 +184,7 @@ private:
       for (boost::redis::push_view elem : boost::redis::push_parser(resp.value()))
       {
         msg_broker_ptr->sendMsgToAllSesisons(
-          C::REDIS_PUB_SUB_CHANNEL, std::string(elem.payload)
+          C::TOPIC_FOR_TEST, std::string(elem.payload)
         );
       }
 

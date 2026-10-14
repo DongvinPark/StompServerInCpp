@@ -16,6 +16,7 @@ namespace C
     constexpr int HEART_BEAT_MS = 33'000; // 33 초.
     constexpr int HEART_BEAT_THRESHOLD_MS = 10 * 60 * 1000; // 10 분.
     constexpr char HEART_BEAT_RESULT[] = "heartbeat";
+    constexpr char TOPIC_FOR_TEST[] = "/topic/greetings";
 
     // class names
     constexpr char MAIN[] = "main";
