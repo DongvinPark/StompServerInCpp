@@ -839,7 +839,7 @@ void Session::unsubscribeTopic(const std::string& id_str)
   - Session 셧다운 시 Session의 소멸자에 의해서 소켓들의 소멸자가 호출되고, 소켓들의 소멸자가 리소스 회수를 완료시킨다.
 ```
 <br><br/>
-9. std::unordered_map의 [] 연산자의 기본 동작
+9. std::unordered_map의 [ ] 연산자의 기본 동작
 - 결론은 마치 JAVA HashMap의 putIfAbsent() 처럼 작동한다는 것이다.
 - 복잡한 if-else{...}; 구현과 map[...][...]; 구현이 동일한 결과를 보여준다.
 ```c++
@@ -931,7 +931,7 @@ void MsgBroker::subscribe(
 10. C++ 과 의존성 분리
 - JAVA Spring 에서 지긋지긋하게 들어봤을 '의존성 분리', 'Dependency Injection' 문제는 C++ 에서도 발생한다.
 - 이번 프로젝트에서는 RedisService.h 에서 이와 관련된 문제가 발생했다.
-- 자세한 설명은 아래의 코드에서 설명하였다.
+- 자세한 내용은 아래의 코드에서 설명하였다.
 ```c++
 /*
 *  본 프로젝트에서는 boost::redis 를 활용하였다.
@@ -941,23 +941,27 @@ void MsgBroker::subscribe(
 * 
 * 그런데 중요한 점은 이러한 임포트가 프로젝트 전체에 결쳐서 단 1 번만 등장해야 한다는 점이다.
 * 이러한 임포트 문을 가지고 있는 RedisService.h 를 다른 클래스(예를 들면 MsgBroker.h & .cpp 같은)에서
-* #include "../src/redis/RedisService.h" 같이 임포트 되는 순간
+* #include "../src/redis/RedisService.h" 같이 임포트 하는 순간
 * '... duplicate symbol ...' 어쩌고 하는 긴 에러 로그가 출련되면서 빌드에 실패한다.
-* 그래서 RedisService.h 는 유일하게 .cpp 없이 .h 안에 모든 구현이 들어가 있다.
+* 그래서 RedisService.h 는 .cpp 없이 .h 안에 모든 구현이 포함돼 있다.
 
 * 문제는 RedisService.h 의 멤버함수를 다른 클래스에서도 쓸 수 있어야 한다는 점이었다. 
 * 즉, MsgBroker 가 RedisService 의 존재를 몰라도 RedisService의 멤버 함수를 호출해야 한다는 점에서
 * 의존성 분리가 필요했던 것이다.
 * 
 * 크게 두 가지 방법이 사용될 수 있다.
-* 1. RedisService의 멤버 함수를 콜백 객체로 만들어서 MsgBroker에게 전달
-* 2. RedisService 가 abstract class 를 오버라이드 하게 만든 후, 해당 클래스를 MsgBroker에 참조로서 초기화
+* 
+* 1. RedisService 의 멤버 함수를 콜백 객체로 만들어서 MsgBroker에게 전달
+*   - 기능이 복잡하지 않을 때는 이 방법이 제일 구현이 쉬웠지만, 개별 함수마다 콜백 객체를 전부 별도 정의 & 초기화 해야 한다.
+* 
+* 2. RedisService 가 abstract class 를 오버라이드 하게 만든 후, 해당 abstract 클래스를 MsgBroker에 참조로서 초기화
+*   - 구체 클래스(RedisService 같은)의 기능이 많아질 때는 추상 클래스를 활용한 인터페이스 방식이 코드 관리에 유리하다.
 */
 
-// 본 프로젝트에서는 1. 번 방법이 사용됐다. RedisService 내부에서 외부의 호출이 가능해야 하는 멤버 함수가
-// 1, 2 개로 적었기 때문이다. 2. 번 방법의 abstract class는 결국 자바의 interface 처럼 작동한다.
-
-// 자세한 구현은 MsgBroker 와 main.cpp 의 코드를 참조하길 바란다.
+// 본 프로젝트에서는 1. 번 방법이 사용됐다.
+// RedisService 내부에서 외부의 호출이 가능해야 하는 멤버 함수가 1, 2 개로 적었기 때문이다.
+// 2. 번 방법의 abstract class는 결국 자바의 interface 처럼 작동한다.
+// 자세한 구현은 MsgBroker의 redis_publish_callback 객체와, main.cpp 의 관련 코드를 참조하길 바란다.
 ```
 
 
