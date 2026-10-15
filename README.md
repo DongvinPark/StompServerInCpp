@@ -3,9 +3,13 @@
 ---
 
 ## 프로젝트 목표
-### SpringBoot 웹소켓 서버에서 발생한 P99 Latency 문제 해결 및 성능 측정
-- SpringBoot/STOMP 웹소켓 서버에서는 동시접속자의 숫자가 많아 질수록, 메시지 전달 시 P99 Latency 가 선형적으로 증가했습니다.  
+### SpringBoot 웹소켓 서버에서 발생한 P99 Latency 증가 문제 해결 및 성능 측정
+- SpringBoot/STOMP 웹소켓 서버에서는 동시접속자의 숫자가 많아 질수록, 서버 -> 클라이언트 도달 기준 P99 Latency 가 선형적으로 증가했습니다.  
   - 이는 SpringBoost 내부의 메시지 브로커가 멀티 스레드로 작동하지 못하고 싱글 스레드 & 순차 실행으로 메시지를 전달하기 때문인 것으로 추정됩니다.
+  - SpringBoost/STOMP 서버에서는 build.gradle 에서 아래의 라이브러리를 dependencies 에 포함돼 있습니다.
+    - implementation 'org.springframework:spring-messaging:6.1.5'
+    - implementation 'jakarta.websocket:jakarta.websocket-api:2.1.1'
+    - implementation 'org.apache.tomcat.embed:tomcat-embed-websocket:10.1.19'
 - C++ Boost Asio 를 활용한 서버에서는 이러한 문제를 해결할 것이며, 동시 접속자가 늘어날 때 서버의 성능 및 상태를 측정합니다.
 
 ---
