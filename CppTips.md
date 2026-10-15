@@ -956,12 +956,52 @@ void MsgBroker::subscribe(
 * 
 * 2. RedisService 가 abstract class 를 오버라이드 하게 만든 후, 해당 abstract 클래스를 MsgBroker에 참조로서 초기화
 *   - 구체 클래스(RedisService 같은)의 기능이 많아질 때는 추상 클래스를 활용한 인터페이스 방식이 코드 관리에 유리하다.
+* 
+* 본 프로젝트에서는 1. 번 방법이 사용됐다.
+* RedisService 내부에서 외부의 호출이 가능해야 하는 멤버 함수가 1, 2 개로 적었기 때문이다.
+* 2. 번 방법의 abstract class는 결국 자바의 interface 처럼 작동한다.
+* 자세한 구현은 MsgBroker의 redis_publish_callback 객체와, main.cpp 의 관련 코드를 참조하길 바란다.
 */
+```
+<br><br/>
+11. std::from_chars(...) 의 용도
+- std::string 같은 char 시퀀스에서 '숫자'를 찾아낼 때 사용한다.
+- 자세한 내용은 아래의 코드에서 설명한다.
+```c++
+#include <charconv>
+#include <iostream>
+#include <string>
+#include <iostrem>
 
-// 본 프로젝트에서는 1. 번 방법이 사용됐다.
-// RedisService 내부에서 외부의 호출이 가능해야 하는 멤버 함수가 1, 2 개로 적었기 때문이다.
-// 2. 번 방법의 abstract class는 결국 자바의 interface 처럼 작동한다.
-// 자세한 구현은 MsgBroker의 redis_publish_callback 객체와, main.cpp 의 관련 코드를 참조하길 바란다.
+int main()
+{
+/*
+* std::from_chars()는 ptr 과 ec 를 포함하는 std::from_chars_result 를 리턴한다.
+* 
+* ptr: a pointer to the first character that was not consumed by parsing.
+* ec: an error code indicating whether parsing failed.
+*/
+    std::string value = "123abc";
+    std::size_t length = 0;
+
+    const auto [ptr, ec] = std::from_chars(
+        value.data(),
+         value.data() + value.size(),
+        length
+    );
+
+    // 문자열이 숫자로 끝나지 않을 경우 아래의 if 문에 걸린다.
+    // 이 경우, ptr 은 문자열의 마지막 위치를 가리키지 않게 된다.
+    // 이 경우, ec 또한 빈 객체가 아니게 된다.
+    if (ec != std::errc{} || ptr != value.data() + value.size())
+    {
+        std:cout << "문자열이 숫자로 끝나지 않음!!\n";
+        return 0;
+    }
+    
+    std::cout << number << '\n';  // 123
+    return 0;
+}
 ```
 
 
