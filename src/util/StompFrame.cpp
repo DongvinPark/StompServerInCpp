@@ -104,7 +104,7 @@ void StompFrame::parse(const std::string& req)
         if (value.empty())
             return;
 
-        // TODO : implement later - 이거는 리눅스에서 빌드해보면 안 된다?? std::의 멤버가 아니라고 뜬다??
+        // #include <charconv> 이게 없으면 Ubuntu Linux 에서는 std::from_chars 를 인식을 못한다.
         // CppTips.md 문서의 11 번 항목 참조.
         const auto [ptr, ec] = std::from_chars(
             value.data(),

@@ -20,6 +20,8 @@
 #include <future>
 #include <thread>
 #include <optional>
+#include <ctime>
+#include <chrono>
 #include <boost/asio.hpp>
 
 #include "../constants/C.h"
@@ -238,6 +240,39 @@ namespace Util
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now().time_since_epoch()
     ).count();
+  }
+
+  /**
+   * 2026-10-15T12:57:34.336482900Z<br/>
+   * 와 같은 UTC 시각 스트링을 리턴한다.
+   */
+  inline std::string getUtcInstantLikeJava()
+  {
+    const auto now = std::chrono::system_clock::now();
+    const auto seconds_point = floor<std::chrono::seconds>(now);
+
+    const auto nanos = duration_cast<std::chrono::nanoseconds>(
+        now - seconds_point
+    ).count();
+
+    const std::time_t time =
+        std::chrono::system_clock::to_time_t(seconds_point);
+
+    std::tm utc{};
+#ifdef _WIN32
+    gmtime_s(&utc, &time);  // Windows / MSVC
+#else
+    gmtime_r(&time, &utc);  // Linux / macOS
+#endif
+
+    std::ostringstream oss;
+
+    oss << std::put_time(&utc, "%Y-%m-%dT%H:%M:%S")
+        << '.'
+        << std::setw(9) << std::setfill('0') << nanos
+        << 'Z';
+
+    return oss.str();
   }
 }
 

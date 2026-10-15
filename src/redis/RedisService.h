@@ -104,7 +104,7 @@ public:
       conn.exec(req, resp);
       conn.stop();
 
-      std::cout << "Push Result: " << std::get<0>(resp).value() << std::endl;
+      //std::cout << "Push Result: " << std::get<0>(resp).value() << std::endl;
       is_ready.store(true);
     }
     catch (std::exception& e)
