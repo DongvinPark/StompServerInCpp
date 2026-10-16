@@ -122,13 +122,13 @@ void MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string
             // 스레드를 10 개 만들어서 처리해버릴까? : 아니면 세션 하나하나 마다 일일이 asio::post 해야 할까?
             for (int i = 0; i < C::TOPIC_INDEX_SIZE; i++)
             {
-                std::cout << "!!! msg TX thread !!! : " << i << "\n";
                 if (topic_map.contains(i))
                 {
                     const auto& idx_ptr_vec = topic_map.at(i);
                     auto vector_ptr = std::make_shared<std::vector<std::shared_ptr<Session>>>(idx_ptr_vec);
-                    std::thread([vector_ptr, toTxMsg]()
+                    std::thread([vector_ptr, toTxMsg, i]()
                     {
+                        std::cout << "!!! msg TX thread generated !!! : " << i << "\n";
                         for (const auto& session_ptr : *vector_ptr)
                         {
                             if (!session_ptr->isShutDown())
