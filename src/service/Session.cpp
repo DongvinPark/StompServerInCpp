@@ -139,7 +139,7 @@ bool Session::start()
                 ) //decorator
             ); //set option
 
-            // Accept the upgrade request and start sync reading on STOMP web-socket
+            // <- 클라이언트에게 웹소켓 연결 완료 응답을 보낸다. 즉, 네트워크 통신이 발생한다.
             web_socket_ptr->accept(req);
             heart_beat_time_millis = Util::getCurrentTimeMillis();
             read();
