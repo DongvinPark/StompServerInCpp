@@ -17,6 +17,12 @@ Server::Server(
     io_context(input_io_context),
     acceptor(input_io_context),
     msg_broker_ptr(input_msg_broker_ptr),
+    strand(boost::asio::make_strand(input_io_context)),
+    reserve_session_removal_task(
+        input_io_context,
+        boost::asio::make_strand(input_io_context),
+        std::chrono::milliseconds(C::SESSION_REMOVAL_MARK_INTERVAL_MS)
+    ),
     remove_session_task(
         input_io_context,
         boost::asio::make_strand(input_io_context),
@@ -42,7 +48,29 @@ void Server::start()
 {
     logger->info2("Server Starts!");
 
-    // 세션 제거 타이머
+    // 세션 예비 삭제 타이머  - shutDown == true 표시된 세션들을 삭제 예정 맵으로 이동 시킨다.
+    reserve_session_removal_task.setTask([&]()
+        {
+            auto copied_session_map = session_id_map;
+            for (const auto& [session_id, session_ptr] : copied_session_map)
+            {
+                if (session_ptr->isShutDown())
+                {
+                    shutdown_session_map.insert({session_id, std::move(session_ptr)});
+                    session_id_map.erase(session_id);
+                    logger->warning(
+                        "Session, " + std::to_string(session_id) +
+                        " shuts down. Remaining session cnt : "
+                        + std::to_string(session_id_map.size())
+                    );
+                }
+            }
+        }
+    );
+    reserve_session_removal_task.start();
+    logger->info3("Dongvin, timer for session delete reservation start!");
+
+    // 세션 실제 제거 타이머
     remove_session_task.setTask([&]()
         {
             shutdown_session_map.clear();
@@ -75,7 +103,6 @@ void Server::start()
                 )
                 {
                     session_ptr->setShutdownTrue();
-                    afterTerminationSession(session_ptr->getSessionId());
                     continue;
                 }
                 if (session_ptr->isShutDown() == false)
@@ -96,6 +123,7 @@ void Server::start()
         io_context, tcp::endpoint(tcp::v4(), C::STOMP_PORT)
     );
 
+    logger->info3("Dongvin, port " + std::to_string(C::STOMP_PORT) + " is listening...");
     try
     {
         while (is_shutdown.load() == false)
@@ -113,12 +141,30 @@ void Server::start()
 
             auto stomp_handler = std::make_shared<StompHandler>(session_ptr);
             session_ptr->setStompHandler(stomp_handler);
-            session_ptr->start();
 
-            session_id_map.emplace(session_id, session_ptr);
-            logger->warning(
-                "Dongvin, new client arrives, id: " + std::to_string(session_id)
-                + " / total session cnt : " + std::to_string(session_id_map.size())
+            // session.start() 이 부분 만을 io_context 에 post 해서 비동기 실행시킨 이유가 있다.
+            // 이 부분이 http 요청을 STOMP websocket 으로 업그레이드 & 초기화 시킨 후
+            // 클라이언트에게 websocket 연결 요청 완료 응답을 보내는 부분이기 때문이다.
+            // 이렇게 하지 않으면 1 만 명의 클라이언트들이 동시에 접속 요청을 했을 때
+            // session.start() 부분이 후속 실행들을 blocking 해버리면서
+            // 후속 연결 요청들이 큐에 쌓이다가 버려진다.
+            // 그 결과 일부 클라이언트는 연결이 거부됐으며, 서버가 먹통이 되면서 비정상 종료됐다.
+            boost::asio::post(
+                strand, [session_ptr, this, session_id]()
+                {
+                    if (session_ptr->start())
+                    {
+                        session_id_map.emplace(session_id, session_ptr);
+                        logger->warning(
+                            "Dongvin, new client arrives, id: " + std::to_string(session_id)
+                            + " / total session cnt : " + std::to_string(session_id_map.size())
+                        );
+                    } else
+                    {
+                        // 웹소켓 초기화에 실패했다면 삭제 예정 세션 맵으로 이동시켜서 나중에 삭제되게 만든다.
+                        session_ptr->setShutdownTrue();
+                    }
+                }
             );
         } //wh
     }
@@ -128,25 +174,10 @@ void Server::start()
         oss << "Server stops with exception : " << e.what();
         logger->severe(oss.str());
     }
-}
-
-void Server::afterTerminationSession(const long session_id)
-{
-    // C++20 부터는 if (map.find(session_id) != map.end()){...} 이렇게 안 해도 된다.
-    if (session_id_map.contains(session_id))
+    catch (...)
     {
-        // '삭제 예정인 세션 맵'으로 이동시킨다.
-        if (
-            auto sessionPtr = session_id_map[session_id];
-            sessionPtr != nullptr
-        )
-        {
-            shutdown_session_map.insert({session_id, std::move(sessionPtr)});
-            session_id_map.erase(session_id);
-            logger->warning(
-                "Session, " + std::to_string(session_id) + " shuts down. Remaining session cnt : "
-                + std::to_string(session_id_map.size())
-            );
-        }
+        std::ostringstream oss;
+        oss << "Server stops with unknown exception!\n";
+        logger->severe(oss.str());
     }
 }

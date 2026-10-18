@@ -39,7 +39,7 @@ public:
   Session& operator=(Session&&) noexcept = delete;
   Session(Session&&) noexcept = delete;
 
-  void start();
+  bool start();
 
   long getSessionId() const;
 
@@ -51,7 +51,7 @@ public:
 
   void pubMsgToRedisViaMsgBroker(const std::string& msg);
 
-  void sendMsgToClientViaMsgBroker(const std::string& msg);
+  void sendMsgToClientViaMsgBroker(const std::string& topic, const std::string& msg);
 
   void sendHeartBeatToClient();
 

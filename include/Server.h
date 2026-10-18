@@ -18,7 +18,7 @@
 
 class Session;
 
-class Server
+class Server : public std::enable_shared_from_this<Server>
 {
 public:
   explicit Server(
@@ -30,8 +30,6 @@ public:
 
   void start();
 
-  void afterTerminationSession(long session_id);
-
 private:
 
   std::shared_ptr<Logger> logger;
@@ -39,10 +37,13 @@ private:
   boost::beast::net::ip::tcp::acceptor acceptor;
   std::shared_ptr<MsgBroker> msg_broker_ptr;
 
+  boost::asio::strand<boost::asio::io_context::executor_type> strand;
+
   std::unordered_map<long, std::shared_ptr<Session>> session_id_map{};
   // shutdown 된 세션들은 별도의 맵에 모아뒀다가
   // 별도의 periodic task로 주기적으로(ex : 30 sec) 제거한다. 그래야 SIGABRT 에러 피할 수 있다.
   std::unordered_map<long, std::shared_ptr<Session>> shutdown_session_map{};
+  PeriodicTask reserve_session_removal_task;
   PeriodicTask remove_session_task;
   PeriodicTask heart_beat_task;
 

@@ -37,12 +37,12 @@ std::string StompHandler::handleStompReq(
         return C::HEART_BEAT_RESULT;
     }
 
-    if (req.back() != C::SINGLE_BACK_SLASH_CHAR)
+    /*if (req.back() != C::SINGLE_BACK_SLASH_CHAR)
     {
-        // heart beat 요청이 아닌 경우 출력한다.
+        // 요청 출력은 생략한다.
         logger->info3(">>> req from client :");
         logger->info3("\n" + req);
-    }
+    }*/
 
     std::string command = stomp_frame.getCommand();
     if (const auto ptr_for_parent_session = parent_session_ptr.lock())

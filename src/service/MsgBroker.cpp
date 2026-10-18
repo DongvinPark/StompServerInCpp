@@ -96,28 +96,49 @@ void MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string
     auto self = shared_from_this();
 
     std::string serverSentTimeUtc = Util::getUtcInstantLikeJava();
-    std::string toTxMsg = message.substr(0, message.find('}')-1);
-    toTxMsg.push_back(',');
 
-    toTxMsg.push_back('\"');
-    toTxMsg.append("serverSendTime");
-    toTxMsg.push_back('\"');
+    if (!self->topic_session_map.contains(topic)) return;
 
-    toTxMsg.push_back(':');
-
-    toTxMsg.push_back('\"');
-    toTxMsg.append(serverSentTimeUtc);
-    toTxMsg.push_back('\"');
-
-    toTxMsg.push_back('}');
+    // 테스트용 클라이언트에게 전송할 메시지를 만든다.
+    std::string toTxMsg = message;
+    if (!toTxMsg.empty() && toTxMsg.back() == '}') { toTxMsg.pop_back(); }
+    if (toTxMsg.size() > 1) { toTxMsg.push_back(','); }
+    toTxMsg += "\"serverSendTime\":\"";
+    toTxMsg += serverSentTimeUtc;
+    toTxMsg += "\"}";
     std::cout << "server's final tx msg !" << toTxMsg << "\n";
 
-    // 메인 io_context 에 task를 post 한다.
-    boost::asio::post(
+    const auto msg_ptr = std::make_shared<std::string>(toTxMsg);
+
+    const auto& topic_map = self->topic_session_map[topic];
+    // 스레드 여러 개를 만들어서 병렬 처리한다.
+    for (int i = 0; i < C::TOPIC_INDEX_SIZE; i++)
+    {
+        if (topic_map.contains(i))
+        {
+            const auto& idx_ptr_vec = topic_map.at(i);
+            auto vector_ptr
+                = std::make_shared<std::vector<std::shared_ptr<Session>>>(idx_ptr_vec);
+            std::thread([vector_ptr, msg_ptr, i, topic]()
+            {
+                // std::cout << "!!! msg TX thread generated !!! : " << i << "\n";
+                for (const auto& session_ptr : *vector_ptr)
+                {
+                    session_ptr->sendMsgToClientViaMsgBroker(topic, *msg_ptr);
+                }
+            }).detach();
+        }
+    } //for
+
+    // 메인 io_context 에 task를 post 할 경우, 클라이언트 입장에서 S -> C 지연 시간이 늘어난다.
+    // strand 를 이용해서 io_context 안에서 직렬화 해서 처리하기 때문에 작업이 '지금 바로' 시작되지는
+    // 않기 때문이다.
+    /*boost::asio::post(
         self->strand,
         [self, topic, toTxMsg]()
         {
             if (!self->topic_session_map.contains(topic)) return;
+
             const auto& topic_map = self->topic_session_map[topic];
             // 스레드를 10 개 만들어서 처리해버릴까? : 아니면 세션 하나하나 마다 일일이 asio::post 해야 할까?
             for (int i = 0; i < C::TOPIC_INDEX_SIZE; i++)
@@ -125,22 +146,20 @@ void MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string
                 if (topic_map.contains(i))
                 {
                     const auto& idx_ptr_vec = topic_map.at(i);
-                    auto vector_ptr = std::make_shared<std::vector<std::shared_ptr<Session>>>(idx_ptr_vec);
-                    std::thread([vector_ptr, toTxMsg, i]()
+                    auto vector_ptr = std::make_shared<std::vector<std::shared_ptr<Session>>>(
+                        idx_ptr_vec);
+                    std::thread([vector_ptr, toTxMsg, i, topic]()
                     {
                         std::cout << "!!! msg TX thread generated !!! : " << i << "\n";
                         for (const auto& session_ptr : *vector_ptr)
                         {
-                            if (!session_ptr->isShutDown())
-                            {
-                                session_ptr->sendMsgToClientViaMsgBroker(toTxMsg);
-                            }
+                            session_ptr->sendMsgToClientViaMsgBroker(topic, toTxMsg);
                         }
                     }).detach();
                 }
             } //for
         }
-    );
+    );*/
 }
 
 void MsgBroker::deleteSession(std::shared_ptr<Session> session_ptr)
@@ -158,7 +177,7 @@ void MsgBroker::deleteSession(std::shared_ptr<Session> session_ptr)
                 "Deleted session in MsgBroker. session id : "
                 + std::to_string(session_ptr->getSessionId())
             );
-            self->printMap(); // 개발 & 체크용.
+            //self->printMap(); // 개발 & 체크용.
         }
     );
 }

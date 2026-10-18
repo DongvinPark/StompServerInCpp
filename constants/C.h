@@ -31,7 +31,7 @@ namespace C
     constexpr char MSG_BROKER[] = "MsgBroker";
 
     // boost::asio::io_context thread pool cnt
-    constexpr int THREAD_CNT_PER_IO_CONTEXT = 2;
+    constexpr int THREAD_CNT_PER_IO_CONTEXT = 1;
 
     // redis conn
     constexpr char REDIS_HOST_IP[] = "127.0.0.1";
@@ -49,11 +49,12 @@ namespace C
     constexpr char HEART_BEAT_CMD[] = "HEART_BEAT";
     constexpr int INVALID = -1;
     constexpr int UNSET = -1;
+    constexpr int SESSION_REMOVAL_MARK_INTERVAL_MS = 10'000;
     constexpr int CLOSED_SESSION_REMOVAL_INTERVAL_MS = 30'000;
     constexpr int ONETIME_TASK_CLEAN_INTERVAL_MS = 30'000;
     constexpr char STOMP_FRAME_NUL_OCTET = '\0';
     constexpr char SINGLE_BACK_SLASH_CHAR = '\n';
-    constexpr int TOPIC_INDEX_SIZE = 10;
+    constexpr int TOPIC_INDEX_SIZE = 15;
 
 }
 
