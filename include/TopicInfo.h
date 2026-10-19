@@ -1,5 +1,5 @@
 //
-// Created by user on 2026-10-11.
+// Created by 박동빈 on 2026-10-11.
 //
 
 #ifndef TOPICINFO_H

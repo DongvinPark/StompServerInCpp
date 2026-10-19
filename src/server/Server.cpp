@@ -49,6 +49,8 @@ void Server::start()
     logger->info2("Server Starts!");
 
     // 세션 예비 삭제 타이머  - shutDown == true 표시된 세션들을 삭제 예정 맵으로 이동 시킨다.
+    // PeriodicTask 들은 전부 main_io_context 로 만들어진 strand 를 통해서
+    // io_context에 bind 된 후 실행되기 때문에 여러 개의 periodic task 들은 서로 동시에 실행되는 일이 없다.
     reserve_session_removal_task.setTask([&]()
         {
             auto copied_session_map = session_id_map;
@@ -147,8 +149,9 @@ void Server::start()
             // 클라이언트에게 websocket 연결 요청 완료 응답을 보내는 부분이기 때문이다.
             // 이렇게 하지 않으면 1 만 명의 클라이언트들이 동시에 접속 요청을 했을 때
             // session.start() 부분이 후속 실행들을 blocking 해버리면서
-            // 후속 연결 요청들이 큐에 쌓이다가 버려진다.
-            // 그 결과 일부 클라이언트는 연결이 거부됐으며, 서버가 먹통이 되면서 비정상 종료됐다.
+            // 후속 연결 요청들이 NIC(Netwokr Interface Card) 연결 요청 큐에 쌓이다가 버려진다.
+            // 연결 요청을 처리하는 속도보다 쌓이는 속도가 압도적으로 빨라서 발생하는 현상이다.
+            // 이 경우 일부 클라이언트는 연결이 거부됐으며, 서버가 먹통이 되면서 비정상 종료됐다.
             boost::asio::post(
                 strand, [session_ptr, this, session_id]()
                 {
