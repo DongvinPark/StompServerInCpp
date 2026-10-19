@@ -86,11 +86,7 @@ void Server::start()
     heart_beat_task.setTask(
         [&]()
         {
-            // 가장 최근 heart beat 받은 시각이 '임계값'보다 과거이면 그 세션은 제거한다.
-            // 단, 원본 맵은 참조하지 않고, 복사본 맵으로 본다.
-            // 세션을 복사하는게 아니라 포인터를 복사하는 것이므로 deep copy 해도 상관 없다.
-            // 여기서 원본 맵으로 순회하면 동일한 맵을 순회하면서 동시에 수정하는 data race 가 발생한다.
-            // 그러면 SIGSEGV, abort() 등이 뜨면서 서버가 예외도 던지지 못하고 바로 죽는다.
+            // CppTips.md 5 번 참고.
             auto copied_session_map = session_id_map;
             int alive_session_count = 0;
             for (const auto& [session_id, session_ptr] : copied_session_map)
@@ -144,14 +140,7 @@ void Server::start()
             auto stomp_handler = std::make_shared<StompHandler>(session_ptr);
             session_ptr->setStompHandler(stomp_handler);
 
-            // session.start() 이 부분 만을 io_context 에 post 해서 비동기 실행시킨 이유가 있다.
-            // 이 부분이 http 요청을 STOMP websocket 으로 업그레이드 & 초기화 시킨 후
-            // 클라이언트에게 websocket 연결 요청 완료 응답을 보내는 부분이기 때문이다.
-            // 이렇게 하지 않으면 1 만 명의 클라이언트들이 동시에 접속 요청을 했을 때
-            // session.start() 부분이 후속 실행들을 blocking 해버리면서
-            // 후속 연결 요청들이 NIC(Netwokr Interface Card) 연결 요청 큐에 쌓이다가 버려진다.
-            // 연결 요청을 처리하는 속도보다 쌓이는 속도가 압도적으로 빨라서 발생하는 현상이다.
-            // 이 경우 일부 클라이언트는 연결이 거부됐으며, 서버가 먹통이 되면서 비정상 종료됐다.
+            // CppTips.md 12 번 참고.
             boost::asio::post(
                 strand, [session_ptr, this, session_id]()
                 {

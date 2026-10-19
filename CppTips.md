@@ -361,11 +361,48 @@
   - 원본 컨테이너의 deep copy 복사본 컨테이너를 순회하면서 변경 대상 요소 발견시 원본 컨테이너에서 수정(삭제 등)
   - 순회 루프와 삭제 동작을 완전 분리 -> 순회 루프 종료 후 컨테이너 변경 동작을 실행하는 것
 ```c++
-/*
-* 더 자세한 내용은
-* Server.h 내의 start() 함수 내의
-* heart_beat_task.setTask([&](){...}); 구현의 주석을 참고하면 된다.
-*/
+void Server::start(){
+...
+    // heart-beat 타이머
+    heart_beat_task.setTask(
+        [&]()
+        {
+            // 가장 최근 heart beat 받은 시각이 '임계값'보다 과거이면 그 세션은 제거한다.
+            // 단, 원본 맵은 참조하지 않고, 복사본 맵으로 본다.
+            // 세션을 복사하는게 아니라 포인터를 복사하는 것이므로 deep copy 해도 상관 없다.
+            // 여기서 원본 맵으로 순회하면 동일한 맵을 순회하면서 동시에 수정하는 data race 가 발생한다.
+            // 그러면 SIGSEGV, abort() 등이 뜨면서 서버가 예외도 던지지 못하고 바로 죽는다.
+            auto copied_session_map = session_id_map;
+            int alive_session_count = 0;
+            for (const auto& [session_id, session_ptr] : copied_session_map)
+            {
+                // 가장 최근에 해당 세션의 클라이언트에게서 온 heart beat 시각과 현재 시각을 대조한다.
+                const int64_t beat_arrive_time_millis = Util::getCurrentTimeMillis();
+                const int64_t latest_heart_beat_time_millis
+                    = session_ptr->getLatestHeartBeatTimeMillis();
+                if (
+                    const int64_t diff = beat_arrive_time_millis - latest_heart_beat_time_millis;
+                    diff > static_cast<int64_t>(C::HEART_BEAT_THRESHOLD_MS)
+                )
+                {
+                    session_ptr->setShutdownTrue();
+                    continue;
+                }
+                if (session_ptr->isShutDown() == false)
+                {
+                    alive_session_count++;
+                    session_ptr->sendHeartBeatToClient();
+                }
+            } //for
+            logger->severe(
+                "Dongvin, sent hear-beat to alive sessions. cnt : "
+                + std::to_string(alive_session_count)
+            );
+        }
+    );
+    heart_beat_task.start();
+...
+}
 ```
 <br><br/>
 6. std::erase(컨테이너, 삭제 대상 요소) 사용법.
@@ -1003,7 +1040,139 @@ int main()
     return 0;
 }
 ```
+<br><br/>
+12. 대량 동시 접속의 충격 분산시키기
+- 성능 테스트 도중 STOMP 연결 요청 1만 개를 3~5 초 이내의 짧은 시간에 집중시켜보았다.
+- 아래의 스펙을 가진 게이밍 노트북이었고, client generator와 서버가 모두 동일 노트북 안에 있었음에도 서버는 순식간에 죽었고, Client generator 는 '연결이 거부 됐습니다'라는 메시지로 가득 찼다. 
+  - ASUS ROG STRIX SCAR Gaming laptop
+  - CPU : 12th Gen Intel(R) Core(TM) i7-12700H(2.30 GHz / 14 core / 20 thread)
+  - RAM : 16 GB
+  - SSD : 1 TB
+  - GPU : GeForce RTX 3060 laptop gpu TGP 140 W, VRAM 6 GB 
+- 한 가지 참고할 점은, boost asio의 async_accept() 를 사용하지 않고도 1만 개의 대량 동시 접속 요청을 전부 수용하는 것에 성공했다는 점이다.
+- async_accept()를 써도 같은 문제를 해결할 수 있지만, async_accept()는 lambda 캡처/참조 객체의 수명 문제/재귀적 호출 + 직렬화 조합으로 루프 형성하기 등등의 다른 복잡한 구조를 도입해야 한다는 단점이 있다.
+- 1 만 명의 대량 동시접속 요청을 짧은 시간 안에 전부 수용하는 것은 본 컴퓨터의 성능이 좋은 편이어서 가능했던 것이기도 하다.
+  - 따라서 실제 상용 서비스를 구현한다면 Backpressure 를 제어하는 부분이 필수이다. 아무리 io_context 에다가 비동기 작업들을 마구 post 할 수 있다고 해도 이것 또한 서버 자원을 잡아먹지 않는 것은 아니기 때문이다.
+```c++
+...
+// 공통 : main.cpp 에서 Server.cpp 내의 연결 요청 수신 while{...} 루프는 별도 스레드에서 실행
+    Server server(main_io_context, msgBroker_ptr);
+    Util::delayedExecutorAsyncByThread(
+        0, [&server] { server.start(); }
+    );
+    
+/*
+* 최초의 구현은 아래와 같이 async 한 동작 없이 전부 sync로 처리하는 코드였다.
+* 아래의 코드는 1000 명의 동시 접속은 감당할 수 있었지만, 1만 명으로 늘자 감당하지 못하고 서버가 죽었다.
+* 서버가 죽은 주된 원인은 session_ptr->start(); 이 부분이 '언제 끝날지 알 수 없으며 시간을 많이 잡아먹는'
+* 작업이었기 때문이다.
+* 정확히는 클라이언트의 요청을 받아서 HTTP Get 요청을 STOMP websocket 으로 업그레이드 시킨 후 완료 응답을
+* 전송해서 세션의 네트워크 통신을 시작시키는 작업이었다.
+* 이 부분에서 blocking 된 채 시간을 잡아먹는 동안에 다른 요청들이 순식간에 빠른 속도로 누적되다가
+* 결국 임계점을 넘으면서 후속 연결 요청들이 차단돼 버린 것이다.
+* */
+void Server::start()
+{
+...
+    tcp::acceptor acceptor(
+        io_context, tcp::endpoint(tcp::v4(), C::STOMP_PORT)
+    );
 
+    try
+    {
+        while (is_shutdown.load() == false)
+        {
+            auto raw_tcp_socket_ptr
+                = std::make_shared<boost::asio::ip::tcp::socket>(acceptor.accept());
+
+            session_id_counter += 1;
+            auto session_id = session_id_counter.load();
+
+            auto session_ptr = std::make_shared<Session>(
+                session_id, raw_tcp_socket_ptr, io_context, *this
+            );
+            session_ptr->setMsgBroker(msg_broker_ptr);
+
+            auto stomp_handler = std::make_shared<StompHandler>(session_ptr);
+            session_ptr->setStompHandler(stomp_handler);
+            session_ptr->start();
+
+            session_id_map.emplace(session_id, session_ptr);
+            logger->warning(
+                "Dongvin, new client arrives, id: " + std::to_string(session_id)
+                + " / total session cnt : " + std::to_string(session_id_map.size())
+            );
+        } //wh
+    }
+    catch (const std::exception& e){...}
+...
+}    
+    
+/*
+* 개선된 코드는 async_accept()가 아닌, accept()를 계속 사용하면서도 
+* session_ptr->start(); 같이 시간을 잡아먹는 작업만을 별도의 io_context 라는 일종의 태스크 큐에다가 
+* 비동기 작업으로서 등록(boost::asio::post(strand, lambda);) 했다. 이 작업은 non-blocking 이다.
+* 
+* 그 결과, 연결을 수락하는 while 루프가 block 되지 않으면서 대량으로 들어오는 
+* 연결 요청들을 연속적으로 치리할 수 있었고, 후속 STOMP 통신들의 활성화 작업은 io_context 가 전부 처리했다. 
+* */
+void Server::start()
+{
+...
+    tcp::acceptor acceptor(
+        io_context, tcp::endpoint(tcp::v4(), C::STOMP_PORT)
+    );
+
+    logger->info3("Dongvin, port " + std::to_string(C::STOMP_PORT) + " is listening...");
+    try
+    {
+        while (is_shutdown.load() == false)
+        {
+            auto raw_tcp_socket_ptr
+                = std::make_shared<boost::asio::ip::tcp::socket>(acceptor.accept());
+
+            session_id_counter += 1;
+            auto session_id = session_id_counter.load();
+
+            auto session_ptr = std::make_shared<Session>(
+                session_id, raw_tcp_socket_ptr, io_context, *this
+            );
+            session_ptr->setMsgBroker(msg_broker_ptr);
+
+            auto stomp_handler = std::make_shared<StompHandler>(session_ptr);
+            session_ptr->setStompHandler(stomp_handler);
+
+            // session.start() 이 부분 만을 io_context 에 post 해서 비동기 실행시킨 이유가 있다.
+            // 이 부분이 http 요청을 STOMP websocket 으로 업그레이드 & 초기화 시킨 후
+            // 클라이언트에게 websocket 연결 요청 완료 응답을 보내는 부분이기 때문이다.
+            // 이렇게 하지 않으면 1 만 명의 클라이언트들이 동시에 접속 요청을 했을 때
+            // session.start() 부분이 후속 실행들을 blocking 해버리면서
+            // 후속 연결 요청들이 NIC(Netwokr Interface Card) 연결 요청 큐에 쌓이다가 버려진다.
+            // 연결 요청을 처리하는 속도보다 쌓이는 속도가 압도적으로 빨라서 발생하는 현상이다.
+            // 이 경우 일부 클라이언트는 연결이 거부됐으며, 서버가 먹통이 되면서 비정상 종료됐다.
+            boost::asio::post(
+                strand, [session_ptr, this, session_id]()
+                {
+                    if (session_ptr->start())
+                    {
+                        session_id_map.emplace(session_id, session_ptr);
+                        logger->warning(
+                            "Dongvin, new client arrives, id: " + std::to_string(session_id)
+                            + " / total session cnt : " + std::to_string(session_id_map.size())
+                        );
+                    } else
+                    {
+                        // 웹소켓 초기화에 실패했다면 삭제 예정 세션 맵으로 이동시켜서 나중에 삭제되게 만든다.
+                        session_ptr->setShutdownTrue();
+                    }
+                }
+            );
+        } //wh
+    }
+    catch (const std::exception& e)
+...
+}
+```
 
 
 
