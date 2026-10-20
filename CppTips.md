@@ -434,6 +434,31 @@ void Session::unsubscribeTopic(const std::string& id_str)
   auto self = shared_from_this();
   msg_broker_ptr->unsubscribe(self, topic_info);
  }
+ 
+ 
+ // 이 코드는 동일한 동작을 반복자를 활용해서 처리한다.
+ // == 연산자의 오버로딩이 필요 없다는 장점이 있다.
+ void Session::unsubscribeTopic(const std::string& id_str)
+{
+    // 제거 대상 요소를 가리키는 반복자를 찾아낸다.
+    const auto it = std::ranges::find_if(
+        topic_info_vec,
+        [&id_str](const TopicInfo& info){ return info.id_str == id_str; }
+    );
+
+    if (it == topic_info_vec.end()) { return; }
+
+    // 반복자로 얻어낸 제거 대상 요소를 std::erase_if()를 써서 실제로 삭제한다.
+    const TopicInfo& topic_info = *it;
+    std::erase_if(
+        topic_info_vec,
+        [&id_str](const TopicInfo& info){ return info.id_str == id_str; }
+    );
+
+    // MsgBroker에서도 삭제한다.
+    auto self = shared_from_this();
+    msg_broker_ptr->unsubscribe(self, topic_info);
+}
 ```
 <br><br/>
 7. Boost beast 라이브러리를 활용해서 STOMP 커넥션 만들기
@@ -1043,18 +1068,17 @@ int main()
 <br><br/>
 12. 대량 동시 접속의 충격 분산시키기
 - 성능 테스트 도중 STOMP 연결 요청 1만 개를 3~5 초 이내의 짧은 시간에 집중시켜보았다.
-- 아래의 스펙을 가진 게이밍 노트북이었고, client generator와 서버가 모두 동일 노트북 안에 있었음에도 서버는 순식간에 죽었고, Client generator 는 '연결이 거부 됐습니다'라는 메시지로 가득 찼다. 
+- 아래의 스펙을 가진 게이밍 노트북이었음에도 서버는 순식간에 죽었고, Client generator 는 '연결이 거부 됐습니다'라는 메시지로 가득 찼다. 
   - ASUS ROG STRIX SCAR Gaming laptop
   - CPU : 12th Gen Intel(R) Core(TM) i7-12700H(2.30 GHz / 14 core / 20 thread)
   - RAM : 16 GB
   - SSD : 1 TB
   - GPU : GeForce RTX 3060 laptop gpu TGP 140 W, VRAM 6 GB 
 - 한 가지 참고할 점은, boost asio의 async_accept() 를 사용하지 않고도 1만 개의 대량 동시 접속 요청을 전부 수용하는 것에 성공했다는 점이다.
-- async_accept()를 써도 같은 문제를 해결할 수 있지만, async_accept()는 lambda 캡처/참조 객체의 수명 문제/재귀적 호출 + 직렬화 조합으로 루프 형성하기 등등의 다른 복잡한 구조를 도입해야 한다는 단점이 있다.
+- async_accept()를 써도 같은 문제를 해결할 수 있지만, async_accept()는 lambda 캡처 / lambda 내 참조 객체의 수명 문제 / 재귀적 호출 + strand 직렬화 조합으로 루프 구성 /... 등등의 복잡한 구조를 도입해야 한다는 단점이 있다.
 - 1 만 명의 대량 동시접속 요청을 짧은 시간 안에 전부 수용하는 것은 본 컴퓨터의 성능이 좋은 편이어서 가능했던 것이기도 하다.
-  - 따라서 실제 상용 서비스를 구현한다면 Backpressure 를 제어하는 부분이 필수이다. 아무리 io_context 에다가 비동기 작업들을 마구 post 할 수 있다고 해도 이것 또한 서버 자원을 잡아먹지 않는 것은 아니기 때문이다.
+  - 따라서 실제 상용 서비스를 구현한다면 Backpressure 를 제어하는 부분이 필수이다. 아무리 io_context 에다가 비동기 작업들을 마구 post 할 수 있다고 해도 이것 또한 서버 자원을 잡아먹는 것은 동일하기 때문이다.
 ```c++
-...
 // 공통 : main.cpp 에서 Server.cpp 내의 연결 요청 수신 while{...} 루프는 별도 스레드에서 실행
     Server server(main_io_context, msgBroker_ptr);
     Util::delayedExecutorAsyncByThread(
@@ -1173,7 +1197,221 @@ void Server::start()
 ...
 }
 ```
+<br><br/>
+13. boost asio strand 를 이용해서 자료구조에 대힌 thread safety 확보하기
+- Server 클래스 내부에는 현재 클라이언트 세션들의 포인터가 <long K, session ptr V> 형태로 저장돼 있다.
+- 예전 구현에서는 세션이 종료될 때마다 각 세션 객체가 Server 에게 '자신을 세션 맵에서 삭제해달라'고 요청했었다.
+- 클라이언트 숫자가 많지 않을 때(1000 명 이하)는 잘 작동했지만, 10000 명 정도의 클라이언트가 동시에 전부 DISCONNECT 되자 이러한 접근은 결국 data race 에 의한 SIGABRT 에러를 발생시켰다.
+- 해결 방법은 아래의 코드에서 설명한다.
+```c++
+/*
+* 세션이 종료 또는 DISCONNECT 되면 다음과 같은 과정을 통해서 최종적으로 리소스가 회수된다.
+* 우선, 개별 세션들 각자가 Server 에가 '자신을 삭제해달라'고 요창하는 방식을 버렸다.
+* 대신
+* 1. reserve_session_removal_task 가 10 초 간격으로 session_id_map의 copy 맵을 순회하면서 shut down 된 세션들을 '삭제 예정 맵'으로 이동시킴.
+* 2. remove_session_task 가 30 초 간격으로 '삭제 예정 세션 맵'내 전체 요소를 삭제 -> 그 결과 shut down 된 세션들의 소멸자 호출.
+* 
+* 중요한 것은, 두 개의 periodic task 정의에 boost asio strand가 사용됐다는 점이다.
+* strand 를 사용해서 task 들을 io_context 에 post 또는 bind 하여 실행하면 동시에 들어온 task 들이 io_context 내부에서 serialized 하게 실행된다.
+* 즉, mutex, lock, condition_variable 을 사용하여 직접 thread safety를 구현한 것과 동일한 효과를 낸다.  
+* */
 
+//------------------ Server.h
+class Session;
+
+class Server : public std::enable_shared_from_this<Server>
+{
+public:
+  ...
+private:
+  ...
+  std::unordered_map<long, std::shared_ptr<Session>> session_id_map{};
+  // shutdown 된 세션들은 별도의 맵에 모아뒀다가
+  // 별도의 periodic task로 주기적으로(ex : 30 sec) 제거한다. 그래야 SIGABRT 에러 피할 수 있다.
+  std::unordered_map<long, std::shared_ptr<Session>> shutdown_session_map{};
+  PeriodicTask reserve_session_removal_task;
+  PeriodicTask remove_session_task;
+  PeriodicTask heart_beat_task;
+...
+};
+
+//------------------ PeriodicTask.h
+class PeriodicTask
+{
+public:
+  using TaskCallback = std::function<void()>;
+  explicit PeriodicTask(
+    boost::asio::io_context& io_context,
+    boost::asio::strand<boost::asio::io_context::executor_type> inputStrand,
+    std::chrono::milliseconds inputInterval
+  );
+...
+  void setTask(TaskCallback inputTask);
+...
+  void start();
+  void stop();
+
+private:
+  void scheduleTask();
+
+  std::shared_ptr<Logger> logger;
+  boost::asio::strand<boost::asio::io_context::executor_type> strand;
+  boost::asio::steady_timer timer;
+  std::chrono::milliseconds interval;
+  TaskCallback task;
+  bool running;
+  bool isTaskSet;
+};
+
+
+//------------------ PeridicTask.cpp
+PeriodicTask::PeriodicTask(
+  boost::asio::io_context& io_context,
+  boost::asio::strand<boost::asio::io_context::executor_type> inputStrand,
+  std::chrono::milliseconds inputInterval
+) : strand(std::move(inputStrand)),
+    timer(io_context),
+    interval(inputInterval),
+    running(false),
+    isTaskSet(false),
+    logger(Logger::getLogger(C::PERIODIC_TASK))
+{
+}
+...
+void PeriodicTask::setTask(TaskCallback inputTask)
+{
+  task = std::move(inputTask);
+  isTaskSet = true;
+}
+...
+void PeriodicTask::start()
+{
+  if (!isTaskSet)
+  {
+    logger->severe("no task to run!");
+  }
+  else
+  {
+    running = true;
+    scheduleTask();
+  }
+}
+...
+void PeriodicTask::scheduleTask()
+{
+  timer.expires_after(interval);
+  timer.async_wait(boost::asio::bind_executor(
+    strand,
+    [this](const boost::system::error_code& ec)
+    {
+      if (!ec)
+      {
+        if (task)
+        {
+          task();
+        }
+        if (running)
+        {
+          scheduleTask();
+        }
+      }
+      else
+      {
+        // used ec.message() instead of ec.what() for boost backward comparability
+        logger->severe("boost steady timer failed! error message : " + ec.message());
+      }
+    }
+  ));
+}
+
+//------------------ Server.cpp
+void Server::start()
+{
+    logger->info2("Server Starts!");
+
+    // 세션 예비 삭제 타이머  - shutDown == true 표시된 세션들을 삭제 예정 맵으로 이동 시킨다.
+    // PeriodicTask 들은 전부 main_io_context 로 만들어진 strand 를 통해서
+    // io_context에 bind 된 후 실행되기 때문에 여러 개의 periodic task 들은 서로 동시에 실행되는 일이 없다.
+    reserve_session_removal_task.setTask([&]()
+        {
+            auto copied_session_map = session_id_map;
+            for (const auto& [session_id, session_ptr] : copied_session_map)
+            {
+                if (session_ptr->isShutDown())
+                {
+                    shutdown_session_map.insert({session_id, std::move(session_ptr)});
+                    session_id_map.erase(session_id);
+                    logger->warning(
+                        "Session, " + std::to_string(session_id) +
+                        " shuts down. Remaining session cnt : "
+                        + std::to_string(session_id_map.size())
+                    );
+                }
+            }
+        }
+    );
+    reserve_session_removal_task.start();
+    logger->info3("Dongvin, timer for session delete reservation start!");
+
+    // 세션 실제 제거 타이머
+    remove_session_task.setTask([&]()
+        {
+            shutdown_session_map.clear();
+            logger->severe("Dongvin, completely removed sessions.");
+        }
+    );
+    remove_session_task.start();
+    logger->info3("Dongvin, timer for closed session removal starts!");
+
+    // heart-beat 타이머
+    heart_beat_task.setTask(
+        [&]()
+        {
+            // CppTips.md 5 번 참고.
+            auto copied_session_map = session_id_map;
+            int alive_session_count = 0;
+            for (const auto& [session_id, session_ptr] : copied_session_map)
+            {
+                // 가장 최근에 해당 세션의 클라이언트에게서 온 heart beat 시각과 현재 시각을 대조한다.
+                const int64_t beat_arrive_time_millis = Util::getCurrentTimeMillis();
+                const int64_t latest_heart_beat_time_millis
+                    = session_ptr->getLatestHeartBeatTimeMillis();
+                if (
+                    const int64_t diff = beat_arrive_time_millis - latest_heart_beat_time_millis;
+                    diff > static_cast<int64_t>(C::HEART_BEAT_THRESHOLD_MS)
+                )
+                {
+                    session_ptr->setShutdownTrue();
+                    continue;
+                }
+                if (session_ptr->isShutDown() == false)
+                {
+                    alive_session_count++;
+                    session_ptr->sendHeartBeatToClient();
+                }
+            } //for
+            logger->severe(
+                "Dongvin, sent hear-beat to alive sessions. cnt : "
+                + std::to_string(alive_session_count)
+            );
+        }
+    );
+    heart_beat_task.start();
+
+    tcp::acceptor acceptor(
+        io_context, tcp::endpoint(tcp::v4(), C::STOMP_PORT)
+    );
+
+    logger->info3("Dongvin, port " + std::to_string(C::STOMP_PORT) + " is listening...");
+    try
+    {
+        while (is_shutdown.load() == false)
+        { ...} //wh
+    }
+    catch (const std::exception& e){...}
+}
+
+```
 
 
 
