@@ -27,7 +27,7 @@
 ### **_C++ 20 or Higher_**
   - boost::redis 는 C++17 부터 사용 가능하지만, Redis Pub/Sub 리스너 구현에 사용된 코루틴 때문에 C++20 or higher 가 필수입니다.
   - 2026년 10월 1일 기준 각 OS들의 최신 C++ 컴파일러들을 사용하는 것을 권장합니다.
-    - Linux : gcc & g++ latest
+    - Linux : Ubuntu 22.04 LTS or higher / gcc 11.4 or higher / g++ 11.4 or higher
     - Apple Silicon Mac : clang(XCode) latest
     - Windows : Visual Studio latest(설치시 MSVC도 같이 설치)
 ---
@@ -84,6 +84,6 @@ grep BOOST_LIB_VERSION /usr/local/include/boost/version.hpp
   - 아래의 명령어를 실행해서 간단한 http 서버를 실행하고, browser 에서 http://localhost:3000 으로 접속합니다.
   - 포트 번호가 일치해야 합니다.
 ```text
-python3 -m http server 3000
+python3 -m http.server 3000
 ```
 
