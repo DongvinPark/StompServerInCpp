@@ -10,15 +10,13 @@
 
 
 /*
-구현 순서.
+프로젝트 진행 순서.
 1. (완료) 레디스 펍/섭 리스너 만들어서 '리스닝' 해보고 출력하기
 2. (완료) 1 명의 클라이언트에게 웹소켓 연결 및 STOMP 프로토콜 제공 테스트(테스트용 클라이언트들과 호환 되게끔)
         요청 검증, heart-beat 체크 및 전송, 토픽 구독/구독취소 등등
 3. (완료) Stomp server 내에서 세션 관리 방법 정하기
-4. 다수의 클라이언트에게 서버가 응답 전송하는 방법들 각각에 대해서 성능 테스트
-    single threaded serial : 싱글 스레드로 응답 전송
-    multi threaded serial : 멀티 스레드로 전송 but, 개별 스레드는 serial
-    io_context base async : 모든 네트워킹 Tx/Rx 를 boost asio io_context에게 위임
+4. (진행중) 로컬 환경에서 S -> C 응답 전송하는 것 테스트 & 디버깅
+5. AWS 에서 테스트 * 결과 분석 & 프로젝트 종료
  */
 
 int main()
@@ -38,12 +36,7 @@ int main()
     {
         for (auto j = 0; j < C::THREAD_CNT_PER_IO_CONTEXT; ++j)
         {
-            threadVec.emplace_back(
-                [&main_io_context]()
-                {
-                    main_io_context.run();
-                }
-            );
+            threadVec.emplace_back( [&main_io_context](){ main_io_context.run(); } );
         }
     }
 
