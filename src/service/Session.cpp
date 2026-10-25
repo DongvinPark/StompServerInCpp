@@ -139,7 +139,8 @@ bool Session::start()
         ) //decorator
       ); //set option
 
-      // <- 클라이언트에게 웹소켓 연결 완료 응답을 보내는 것도 비동기로 처리한다.
+      // <- 클라이언트에게 웹소켓 연결 완료 응답을 보내느라 block 되는 것을 예방한다.
+      // CppTips.md 의 15 번 참고.
       auto req_ptr = std::make_shared<
         boost::beast::http::request<boost::beast::http::string_body>
       >(req);
@@ -224,29 +225,8 @@ void Session::sendMsgToClientViaMsgBroker(const std::string& topic, const std::s
       + msg;
     frame.push_back(C::STOMP_FRAME_NUL_OCTET);
 
-    // 그냥 sync 로 보내볼까? : 아래에 주석 친 코드보다 훨씬 빠르잖아?! TODO : 왜 그렇지?
+    // socket에 바로 쓰는 것이 io_context 에 post 하는 것보다 더 빠르다.
     web_socket_ptr->write(boost::asio::buffer(frame));
-
-    /*
-    auto self = shared_from_this();
-    auto res_frame_ptr = std::make_shared<std::string>(frame);
-    boost::asio::post(
-        self->strand,
-        [self, res_frame_ptr]()
-        {
-            self->web_socket_ptr->async_write(
-                boost::asio::buffer(*res_frame_ptr),
-                [self, res_frame_ptr](const boost::system::error_code& ec, std::size_t)
-                {
-                    if (ec)
-                    {
-                        self->logger->severe(
-                            "Msg TX to client failed: " + ec.message());
-                    }
-                }
-            ); // async_write
-        }
-    );*/
   }
   else
   {
@@ -441,6 +421,7 @@ void Session::read()
           self->logger->info2("\n" + res_frame);
       }*/
 
+      // CppTips.md 의 14 번 참고.
       auto res_frame_ptr = std::make_shared<std::string>(res_frame);
       boost::asio::post(
         self->strand,

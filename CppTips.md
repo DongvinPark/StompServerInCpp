@@ -1410,8 +1410,41 @@ void Server::start()
     }
     catch (const std::exception& e){...}
 }
-
 ```
+<br><br/>
+14. boost asio soft_mutex 에러 문제 : async read/write는 특히 '직렬화'에 신경 써야 한다.
+- ??
+```c++
+// write later
+```
+<br><br/>
+15. boost::asio::post()의 진짜 의미 - blocking 함수는 여전히 blocking 이다. 
+- ??
+```c++
+// write later
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
