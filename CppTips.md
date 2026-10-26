@@ -1412,17 +1412,213 @@ void Server::start()
 }
 ```
 <br><br/>
-14. boost asio soft_mutex 에러 문제 : async read/write는 특히 '직렬화'에 신경 써야 한다.
-- ??
+14. boost asio soft_mutex 에러 문제 : async read() 와 async write()는 특히 '직렬화'에 신경 써야 한다.
+- Boost.Asio와 Boost.Beast를 이용해 C++ STOMP 서버를 구현하고, Java 클라이언트 생성기(JDK virtual thread)로 약 10,000개의 WebSocket 연결을 생성하는 테스트를 Ubuntu 22.04 가 설치된 구형 노트북에서 진행했다.
+  - 수정 전에는 약 540개 연결이 만들어진 시점에 다음 assertion이 발생하면서 서버 프로세스가 비정상 종료됐다.
+  - boost/beast/websocket/detail/soft_mutex.hpp:89: Assertion `id_ != T::id' failed.
+  - 에러 메시지에는 write_some_op 타입도 나타났다.
+  - 이 메시지는 WebSocket 내부의 작업 동기화 검사에서 assertion이 실패했으며, 특히 쓰기 작업의 중첩 실행 가능성을 의심할 수 있는 단서였다.
+- 즉, 첫 번째 async_read()의 후속 동작인 async_write() 가 완료되기도 전에 다음 async_read()를 호출 해버리면서 두 개의 async_write()가 동일 소켓에 write를 하려다가 boost asio의 soft_mutex 내의 asert에 걸려서 서버가 죽은 것이다.
+- 이 문제는 컴퓨팅 성능이 뛰어난 머신(ASUS Rog Strix / M1 Ultra mac studio)에서는 발생하지 않다가, 성능이 낮은 구형 LG ultrabook 노트북에서 발생했다는 점에서 '에러의 재현 가능성'이 낮아서 특히 위험한 에러다.
 ```c++
-// write later
+// 수정 전 Session.cpp 내 start() 함수. 소켓을 웹소켓으로 업그레이드 시키고, async_read()를 최초로 호출한다.
+// start() 자체가 통째로 blocking 함수다. 그 안에서 발생하는 네트위킹이 전부 sync-blocking으로 작동한다.
+bool Session::start()
+{
+...
+    try
+    {
+        boost::beast::flat_buffer buffer;
+        boost::beast::http::request<boost::beast::http::string_body> req;
+        
+        // 클라이언트의 최초 http get 요청을 읽는다.
+        boost::beast::http::read(*raw_tcp_socket_ptr, buffer, req);
+
+        // validate incoming req ...
+        // select protocol ...
+
+        ...
+        {
+            // 클라이언트의 http get 요청을 웹소켓 연결로 업그레이드 시킨다.
+            web_socket_ptr = std::make_shared<
+                boost::beast::websocket::stream<boost::beast::tcp_stream>
+            >(std::move(*raw_tcp_socket_ptr));
+
+            web_socket_ptr->set_option(
+                boost::beast::websocket::stream_base::decorator(
+                    [protocol](boost::beast::http::response_header<>& hdr)
+                    {
+                        hdr.set(
+                            boost::beast::http::field::sec_websocket_protocol,
+                            protocol
+                        );
+                    }
+                ) //decorator
+            ); //set option
+
+            // <- 클라이언트에게 웹소켓 연결 완료 응답을 보낸다. 즉, 네트워크 통신이 발생한다.
+            web_socket_ptr->accept(req);
+            heart_beat_time_millis = Util::getCurrentTimeMillis();
+            read(); 
+            return true;
+        }
+    } // try
+    catch (const std::exception& e) {...}
+}
+
+// 수정 전 Session.cpp 내 read() 함수. async_read() -> async_write() 이후 다시 read()를 호출해서 요청/응답의 재귀 루프를 만든다.
+void Session::read()
+{
+    if (is_shutdown.load())
+    {
+        // 이 부분도 출력을 생략한다.
+        //logger->warning("Session was closed! Stopped socket reading");
+        return;
+    }
+    auto self = shared_from_this();
+    web_socket_ptr->async_read(
+        read_buffer,
+        [self](const boost::system::error_code& ec, std::size_t)
+        {
+            if (ec)
+            {
+                ...
+                return;
+            }
+
+            // hansdle req and mske response ...
+
+            auto res_frame_ptr = std::make_shared<std::string>(res_frame);
+            self->web_socket_ptr->async_write(
+                boost::asio::buffer(*res_frame_ptr),
+                [self, res_frame_ptr, is_disconnected_ptr]
+            (const boost::system::error_code& ec_internal, std::size_t)
+                {
+                    if (ec_internal)
+                    {
+                        ...
+                        return;
+                    }
+                    ...
+                }
+            ); // async_write
+            
+            // 바로 윗줄의 async_write() 가 non-blocking 이기 때문에 self->read()가 
+            // async_wirte()가 끝나기도 전에 호출이 되면서 후속 async_write()가 이전 
+            // async_write()가 동일한 소켓에 서로 동시에 쓰려고 할 수 있다.
+            // 성능이 좋은 컴퓨터에서는 async_write() 가 후속 async_write()보다 '항상' 빨리 끝났기
+            // 때문에 문제가 있어도 발견되지 않았던 것이다.
+            self->read_buffer.consume(self->read_buffer.size());
+            boost::asio::post(self->strand, [self]() { self->read(); });
+        }
+    );
+}
+
+//=============== 수정 후 ===============
+
+// 수정 후 Session.cpp 내 start() 함수 : 최초 Http Get 요청을 읽는 곳 이외에는 최대한 non-blocking을 도입.
+bool Session::start()
+{
+...
+  try
+  {
+    boost::beast::flat_buffer buffer;
+    // 클라이언트가 전송하는 최초의 http get 요청은 sync-blocking으로 읽는 코드를 유지했다.
+    // 여기까지 async_read()로 처리할 경우, 후속 작업을 전부 strand & completion handler로
+    // 엮어야 해서 코드가 복잡해지기 때문이다.
+    // 구형 노트북에 4초 이내에 10K 명의 클라이언트를 때러박는 성능테스트를 10번 반복해도 문제 없었다.
+    boost::beast::http::request<boost::beast::http::string_body> req;
+    boost::beast::http::read(*raw_tcp_socket_ptr, buffer, req);
+
+    // validate incoming req & select protocol
+   
+    {
+      // make response and upgrade http get req to STOMP web socket
+
+      // <- 클라이언트에게 웹소켓 연결 완료 응답을 보내는 것도 비동기로 처리한다.
+      // boost::asio::post 가 blocking 함수를 non-blocking으로 바꿔주지는 못하지만,
+      // 적어도 start() 함수의 호출자(Server.ccp 내의 start() 함수 내의 while 루프)가 
+      // blocking 되는 시간을 줄일 수는 있다.
+      // 클라이언트한테 응답을 전송하는 Task를 다른 io_context.run() 스레드한테 넘겨버리기 때문이다.
+      auto req_ptr = std::make_shared<
+        boost::beast::http::request<boost::beast::http::string_body>
+      >(req);
+      boost::asio::post(
+        self->strand, [self, req_ptr]()
+        {
+          self->web_socket_ptr->accept(*req_ptr);
+          self->heart_beat_time_millis = Util::getCurrentTimeMillis();
+          self->read();
+        }
+      );
+      return true;
+    }
+  } // try
+  catch (const std::exception& e){...}
+}
+
+// 수정 후 Session.cpp 내 read() 함수 : async_wirte()가 완료된 후에만 후속 read()를 호출하게 만들었으며,
+// 재귀 루프를 strand로 직렬화후 처리하게 만들어서 async_read() -> async_write() -> next async_read() 의 순서가
+// 꼬이지 않게 만들었다.
+void Session::read()
+{
+  
+  auto self = shared_from_this();
+  web_socket_ptr->async_read(
+    read_buffer,
+    [self](const boost::system::error_code& ec, std::size_t)
+    {
+      if (ec)
+      {
+        // async_read 도중 발생한 에러를 처리한다.
+        return;
+      }
+
+      // 여기서부터가 진짜 async_read()의 completion handler 다.
+      // 즉, 이제부터가 async_read()가 완료된 이후에 진행되는 후속작업이다.
+      
+      // handle req and make response ...
+      
+      // async_read()로 읽은 요청을 처리한 다음 write() 하는 task를
+      // boost asio post()와 starnd를 이용해서 io_context 에다가 '예약' 해 놓는다.
+      boost::asio::post(
+        self->strand, // strand를 써서, io_context 내부에서 task 들이 serialized 하게 처리되게 만든다.
+        [self, res_frame_ptr, is_disconnected_ptr]()
+        {
+          // async_write()를 async_read()의 completion_handler 내부에 정의함으로써,
+          // async_read() 가 끝나야만 async_wtre() 와 후속 async_read()가 실행되게 만든다.
+          self->web_socket_ptr->async_write(
+            boost::asio::buffer(*res_frame_ptr),
+            [self, res_frame_ptr, is_disconnected_ptr]
+          (const boost::system::error_code& ec_internal, std::size_t)
+            {
+              if (ec_internal)
+              {
+                // handler error ...
+                return;
+              }
+              
+              // 버퍼는 다음 요청을 위해서 비운다.
+              self->read_buffer.consume(self->read_buffer.size());
+              self->read(); // 다음 요청을 읽기 위한 async_read() 를 호춣한다.
+            }
+          ); // async_write
+        }
+      ); //boost::asio::post
+    }// end of completion handler of async_read()
+  );
+}
 ```
 <br><br/>
 15. boost::asio::post()의 진짜 의미 - blocking 함수는 여전히 blocking 이다. 
-- ??
-```c++
-// write later
-```
+- 그러나, 해당 작업을 처리하는 io_context.run() 스레드는 blocking 될지언정, 다른 io_context.run() 스레드까지 blocking 시키지는 않는다.
+- 그래서 io_context.run(); 함수는 여러 스레드에서 호출해 두는 것이 필요하다.
+<br><br/>
+16. Linux 에서 1024 명의 클라이언트 소켓 밖에 열지 못 할 때 : 시스템 설정을 바꿔야 한다.
+- ulimit -Sn 65535
+- 이 명령어를 실행시키면 현재 터미널에 한해서 임시로 최대 오픈 가능 소켓 개수를 확장시킬 수 있다.
+- 더 자세한 설명/셋팅 방법은 Chat GPT 등에게 물어보면 자세히 대답해줄 것이다.
+- "우분투(또는 Amazon Linux)에서 대규모 동시 접속을 감당할 수 있도록 소켓 및 관련 커널 설졍을 수정 및 튜닝하는 방법은 무엇인가?"라고 물어본 후, "ulimit -Sn 65535 명령어의 장점/한계/주의사항은 무엇인가?"라고 물어보면 된다.
 
 
 
