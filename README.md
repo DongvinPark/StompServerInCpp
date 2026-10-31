@@ -74,7 +74,7 @@ grep BOOST_LIB_VERSION /usr/local/include/boost/version.hpp
 ```
 ---
 ### **_Install OpenSSL and Link It_**
-  - 각 OS 별로 OpenSSL이 설치돼 있어야 합니다.
+  - 각 OS 별로 development 용 OpenSSL 이 설치돼 있어야 합니다.
   - 현재 CMakeLists.txt에서는 OpenSSL과 Boost 라이브러리가 설치 돼 있다고 가정하고 이 둘을 링크합니다.
 ---
 ### 테스트용 Stomp Client 사용법
