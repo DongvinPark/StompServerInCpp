@@ -119,13 +119,22 @@ void MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string
             const auto& idx_ptr_vec = topic_map.at(i);
             auto vector_ptr
                 = std::make_shared<std::vector<std::shared_ptr<Session>>>(idx_ptr_vec);
-            std::thread([vector_ptr, msg_ptr, i, topic]()
+            std::thread([vector_ptr, msg_ptr, i, topic, this]()
             {
-                // std::cout << "!!! msg TX thread generated !!! : " << i << "\n";
+                logger->severe(
+                    "Msg FanOut thread " + std::to_string(i) + " generated! / epochMs : "
+                    + std::to_string(Util::getCurrentTimeMillis())
+                );
+                int txCnt = 0;
                 for (const auto& session_ptr : *vector_ptr)
                 {
                     session_ptr->sendMsgToClientViaMsgBroker(topic, *msg_ptr);
+                    txCnt++;
                 }
+                logger->severe(
+                    "Msg FanOut thread tx finished! : " + std::to_string(txCnt) + " / epochMs : "
+                    + std::to_string(Util::getCurrentTimeMillis())
+                );
             }).detach();
         }
     } //for

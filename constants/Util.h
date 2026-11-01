@@ -231,14 +231,14 @@ namespace Util
   inline int64_t getCurrentTimeMillis()
   {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::high_resolution_clock::now().time_since_epoch()
+        std::chrono::system_clock::now().time_since_epoch()
     ).count();
   }
 
   inline int64_t getElapsedTimeNanoSec()
   {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()
+      std::chrono::system_clock::now().time_since_epoch()
     ).count();
   }
 

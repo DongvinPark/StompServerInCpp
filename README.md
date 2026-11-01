@@ -37,7 +37,7 @@
   - boost 라이브러리 설치 방법
     - macOS 에서는 homebrew 를 사용합니다.
     - Windows 에서는 vcpkg 를 사용합니다.
-    - Linux 에서는 Ubuntu 22.04 LTS & 24.04 LTS 기준으로 아래의 터미널 명령어들로 설치합니다. 
+    - Linux 에서는 Ubuntu 22.04 LTS or higher 그리고 Amazon Linux 기준으로 아래의 터미널 명령어들로 설치하면 됩니다. 
 ```text
 - 사전 준비 작업
 gcc/g++/cmake/openssl 이 전부 설치돼 있어야 하고,

@@ -1619,6 +1619,19 @@ void Session::read()
 - 이 명령어를 실행시키면 현재 터미널에 한해서 임시로 최대 오픈 가능 소켓 개수를 확장시킬 수 있다.
 - 더 자세한 설명/셋팅 방법은 Chat GPT 등에게 물어보면 자세히 대답해줄 것이다.
 - "우분투(또는 Amazon Linux)에서 대규모 동시 접속을 감당할 수 있도록 소켓 및 관련 커널 설졍을 수정 및 튜닝하는 방법은 무엇인가?"라고 물어본 후, "ulimit -Sn 65535 명령어의 장점/한계/주의사항은 무엇인가?"라고 물어보면 된다.
+<br><br/>
+17. Unix epoch milliseconds 를 리턴하는 Util 함수를 C++로 구현하기.
+- 아래와 같이 구현하면 된다.
+- high_resolution_clock 은 쓰면 안 된다. 컴파일러 구현체(MSVC, GCC, Apple Clang)에 따라서 다른 Clock이 실행될 수 있기 때문이다.
+```c++
+  inline int64_t getCurrentTimeMillis()
+  {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+  }
+```
+<br><br/>
 
 
 

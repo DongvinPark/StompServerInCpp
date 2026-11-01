@@ -8,7 +8,7 @@
 namespace C
 {
     // version
-    constexpr char VER[] = "1.0.0";
+    constexpr char VER[] = "1.0.2";
 
     // STOMP server urls & port
     constexpr int STOMP_PORT = 8080;
@@ -54,7 +54,7 @@ namespace C
     constexpr int ONETIME_TASK_CLEAN_INTERVAL_MS = 30'000;
     constexpr char STOMP_FRAME_NUL_OCTET = '\0';
     constexpr char SINGLE_BACK_SLASH_CHAR = '\n';
-    constexpr int TOPIC_INDEX_SIZE = 15;
+    constexpr int TOPIC_INDEX_SIZE = 3;
 
 }
 
