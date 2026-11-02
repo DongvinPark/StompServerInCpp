@@ -95,7 +95,7 @@ void MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string
 {
     auto self = shared_from_this();
 
-    std::string serverSentTimeUtc = Util::getUtcInstantLikeJava();
+    auto serverSentTimeEpochMs = Util::getCurrentTimeMillis();
 
     if (!self->topic_session_map.contains(topic)) return;
 
@@ -104,7 +104,7 @@ void MsgBroker::sendMsgToAllSesisons(const std::string& topic, const std::string
     if (!toTxMsg.empty() && toTxMsg.back() == '}') { toTxMsg.pop_back(); }
     if (toTxMsg.size() > 1) { toTxMsg.push_back(','); }
     toTxMsg += "\"serverSendTime\":\"";
-    toTxMsg += serverSentTimeUtc;
+    toTxMsg += std::to_string(serverSentTimeEpochMs);
     toTxMsg += "\"}";
     std::cout << "server's final tx msg !" << toTxMsg << "\n";
 
