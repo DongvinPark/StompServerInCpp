@@ -54,7 +54,7 @@ namespace C
     constexpr int ONETIME_TASK_CLEAN_INTERVAL_MS = 30'000;
     constexpr char STOMP_FRAME_NUL_OCTET = '\0';
     constexpr char SINGLE_BACK_SLASH_CHAR = '\n';
-    constexpr int TOPIC_INDEX_SIZE = 3;
+    constexpr int TOPIC_INDEX_SIZE = 4;
 
 }
 
