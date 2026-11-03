@@ -212,6 +212,7 @@ void Session::sendMsgToClientViaMsgBroker(const std::string& topic, const std::s
             if (topic_info.topic == topic)
             {
                 id_str = topic_info.id_str;
+                break;
             }
         }
         std::string frame =
@@ -229,6 +230,7 @@ void Session::sendMsgToClientViaMsgBroker(const std::string& topic, const std::s
         web_socket_ptr->write(boost::asio::buffer(frame));
 
         // boost post 와 async_write를 쓰면 S -> C 지연시간의 평균이 커지고, 표준 편차는 훨씬 더 커진다.
+        // async_write가 아니라 그냥 write를 써도 마찬가지다.
         /*auto res_frame_ptr = std::make_shared<std::string>(frame);
         auto self = shared_from_this();
         boost::asio::post(
