@@ -28,17 +28,14 @@ int main()
     std::vector<std::thread> threadVec;
     int cpuCoreCnt = static_cast<int>(std::thread::hardware_concurrency());
     logger->warning("CPU Core Cnt : " + std::to_string(cpuCoreCnt));
-    for (auto i = 0; i < cpuCoreCnt; ++i)
+    for (auto i = 0; i < C::IO_CONTEXT_THREAD_CNT; ++i)
     {
-        for (auto j = 0; j < C::THREAD_CNT_PER_IO_CONTEXT; ++j)
-        {
-            threadVec.emplace_back( [&main_io_context](){ main_io_context.run(); } );
-        }
+        threadVec.emplace_back( [&main_io_context](){ main_io_context.run(); } );
     }
 
     logger->warning(
         "Made io_cotext.run() worker thread pool with thread cnt: "
-        + std::to_string(cpuCoreCnt * C::THREAD_CNT_PER_IO_CONTEXT)
+        + std::to_string(C::IO_CONTEXT_THREAD_CNT)
     );
 
     // used std::promise to synchronize the shutdown process
