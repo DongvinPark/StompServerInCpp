@@ -22,31 +22,31 @@ int main()
     logger->warning("Dongvin, C++ STOMP Server STARTS. ver: " + std::string{C::VER});
     logger->warning("=================================================================");
 
-    // make worker thread pool for main boost.asio io_context
+    // make boost.asio io_context and generate io_context.run() threads.
     boost::asio::io_context main_io_context;
     auto workGuard = boost::asio::make_work_guard(main_io_context);
     std::vector<std::thread> threadVec;
-    int cpuCoreCnt = static_cast<int>(std::thread::hardware_concurrency());
-    logger->warning("CPU Core Cnt : " + std::to_string(cpuCoreCnt));
-    for (auto i = 0; i < C::IO_CONTEXT_THREAD_CNT; ++i)
+    const int cpuThreadCnt = static_cast<int>(std::thread::hardware_concurrency());
+    logger->warning("CPU Thread Cnt : " + std::to_string(cpuThreadCnt));
+    for (auto i = 0; i < C::IO_CONTEXT_RUN_THREAD_CNT; ++i)
     {
         threadVec.emplace_back( [&main_io_context](){ main_io_context.run(); } );
     }
 
     logger->warning(
         "Made io_cotext.run() worker thread pool with thread cnt: "
-        + std::to_string(C::IO_CONTEXT_THREAD_CNT)
+        + std::to_string(C::IO_CONTEXT_RUN_THREAD_CNT)
     );
 
     // used std::promise to synchronize the shutdown process
     std::promise<void> shutdownPromise;
-    auto shutdownFuture = shutdownPromise.get_future();
+    const auto shutdownFuture = shutdownPromise.get_future();
 
     // MsgBroker 초기화
-    std::shared_ptr<MsgBroker> msgBroker_ptr = std::make_shared<MsgBroker>(main_io_context);
+    auto msgBroker_ptr = std::make_shared<MsgBroker>(main_io_context);
 
     // redis conn 테스트.
-    std::shared_ptr<RedisService> redis_service_ptr = std::make_shared<RedisService>(msgBroker_ptr);
+    auto redis_service_ptr = std::make_shared<RedisService>(msgBroker_ptr);
     redis_service_ptr->init();
 
     // 콜백 등록 : 순환 참조 방지를 위해서 weak ptr 쓴다.

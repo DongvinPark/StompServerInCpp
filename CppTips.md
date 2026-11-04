@@ -1632,7 +1632,20 @@ void Session::read()
   }
 ```
 <br><br/>
-
+18. 서버의 Fan-Out 성능을 측정할 때, 서버의 응답을 수신하는 Client Generator 쪽 코드를 서버 만큼 신경 써서 구현해야 하는 이유.
+- 성능 테스트용 Client Generator 측에서 만들어낸 virtual thread client 들의 비효율적으로 작동할 수도 있다.
+  - 서버가 응답을 빨리 Fan-Out 하더라도, Client Generator 가 수신이 늦이지면서 S -> C 지연 시간이 길어진다.
+  - 결국 잘못은 '측정 도구'가 했음에도 애꿎은 서버 탓을 하면서 엉뚱한 곳을 고치느라 시간 낭비 할 수도 있는 것이다.
+- JDK 21(or higher) 의 virtual thread 로 Client를 만들어서 성능 테스트를 할 때는, virtual thread 의 응답 수신부 쪽 코드를 최대한 효율적으로 작성해야 한다.
+  - 객체 생성을 최소화 하고,
+  - ObjectMapper 내의 writeValueAsString() 같이 Exception 을 던지는 가능은 사용을 자제하고,
+  - 불필요한 계산은 최소화 하고,
+  - System.out.print() 같은 표준 출력도 최대한 사용하지 말아야 한다.
+```text
+그리고, 성능 테스트에서 뭔가 '의아한' 결과가 나왔을 때는 '원래 그런가 보다'라고 넘기지 말고 꼭 '왜 그렇지?'라는 질문을 끝까지 파고들자.
+그래야 의미 있는 결과를 얻을 수 있고, 보통 그런 '의미 있는 결과'는 반복 테스트를 해야만 나오는 경향이 있다.
+```
+<br><br/>
 
 
 

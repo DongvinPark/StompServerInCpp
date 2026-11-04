@@ -31,7 +31,7 @@ namespace C
     constexpr char MSG_BROKER[] = "MsgBroker";
 
     // boost::asio::io_context thread pool cnt
-    constexpr int IO_CONTEXT_THREAD_CNT = 5;
+    constexpr int IO_CONTEXT_RUN_THREAD_CNT = 5;
 
     // redis conn
     constexpr char REDIS_HOST_IP[] = "127.0.0.1";
