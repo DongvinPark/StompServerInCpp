@@ -1,4 +1,4 @@
 target client cnt,server fan-out tx delay(ms)
 2500,13
 5000,31
-10000:53
+10000,53
