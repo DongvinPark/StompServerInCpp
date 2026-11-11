@@ -10,7 +10,15 @@
     - implementation 'org.springframework:spring-messaging:6.1.5'
     - implementation 'jakarta.websocket:jakarta.websocket-api:2.1.1'
     - implementation 'org.apache.tomcat.embed:tomcat-embed-websocket:10.1.19'
-- C++ Boost Asio 를 활용한 서버에서는 이러한 문제를 해결할 것이며, 동시 접속자가 늘어날 때 서버의 성능 및 상태를 측정합니다.
+- [C++ Boost Asio 를 활용한 서버에서는 이러한 문제를 해결할 수 있는지 확인해보고자 합니다.]()
+
+---
+
+## 배운점
+### ??
+- ?
+### ??
+- ?
 
 ---
 
