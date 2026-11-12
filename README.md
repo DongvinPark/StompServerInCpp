@@ -10,7 +10,14 @@
     - implementation 'org.springframework:spring-messaging:6.1.5'
     - implementation 'jakarta.websocket:jakarta.websocket-api:2.1.1'
     - implementation 'org.apache.tomcat.embed:tomcat-embed-websocket:10.1.19'
-- [C++ Boost Asio 를 활용한 서버에서는 이러한 문제를 해결할 수 있는지 확인해보고자 합니다.]()
+- ***C++ Boost Asio 를 활용한 서버에서는 이러한 문제를 해결할 수 있는지 확인해보고자 합니다.***
+
+---
+
+## 성능 테스트 결과
+- 약간의 개선은 가능했지만, 근본적인 해결 또는 압도적인 격차를 내는 것은 불가능 했습니다.
+- 동시접속자가 늘어날수록 P99 Latency 가 증가하는 것은 C++에서도 피할 수 없었습니다.
+- [테스트 결과 링크](https://github.com/DongvinPark/StompServerInCpp/blob/main/PerformanceTestResult.md)
 
 ---
 
@@ -19,6 +26,13 @@
 - ?
 ### ??
 - ?
+
+---
+
+## 서버 아키텍처
+- 그림 추가할 것.
+  - 설명 추가 필요 1
+  - 섦여 추가 필요 2
 
 ---
 
