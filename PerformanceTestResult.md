@@ -36,7 +36,7 @@ Unit: ms
 | 10,000 | C++ | 12 | 113 | **69.34** | 28.24 | 73 | 109 | 112 |
 | 10,000 | Java | 31 | 151 | 91.31 | 32.50 | 93 | 139 | 145 |
 
-### 2. Server TX Completion Latency
+### 2. Server TX Completion Latency(서버가 메시지 fan-out 완료에 걸린 시간)
 Unit: ms
 
 | Concurrent Users | C++ | Java | Faster Implementation |
