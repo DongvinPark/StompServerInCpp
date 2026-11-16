@@ -6,17 +6,14 @@
 ### SpringBoot 웹소켓 서버에서 발생한 P99 Latency 증가 문제 해결 및 성능 측정
 - SpringBoot/STOMP 웹소켓 서버에서는 동시접속자의 숫자가 많아 질수록, 서버 -> 클라이언트 도달 기준 P99 Latency 가 선형적으로 증가했습니다.  
   - 이는 SpringBoost 내부의 메시지 브로커가 멀티 스레드로 작동하지 못하고 싱글 스레드 & 순차 실행으로 메시지를 전달하기 때문인 것으로 추정됩니다.
-  - SpringBoost/STOMP 서버에서는 build.gradle 에서 아래의 라이브러리를 dependencies 에 포함돼 있습니다.
-    - implementation 'org.springframework:spring-messaging:6.1.5'
-    - implementation 'jakarta.websocket:jakarta.websocket-api:2.1.1'
-    - implementation 'org.apache.tomcat.embed:tomcat-embed-websocket:10.1.19'
+  - [SpringBoost/STOMP 서버 Github](https://github.com/DongvinPark/stomp-redis-test)
 - ***C++ Boost Asio 를 활용한 서버에서는 이러한 문제를 해결할 수 있는지 확인해보고자 합니다.***
 
 ---
 
 ## 성능 테스트 결과
-- 약간의 개선은 가능했지만, 근본적인 해결 또는 압도적인 격차를 내는 것은 불가능 했습니다.
-- 동시접속자가 늘어날수록 P99 Latency 가 증가하는 것은 C++에서도 피할 수 없었습니다.
+- ***약간의 개선은 가능했지만, 근본적인 해결 또는 압도적인 격차를 내는 것은 불가능 했습니다.***
+- ***동시접속자가 늘어날수록 P99 Latency 가 증가하는 것은 C++에서도 피할 수 없었습니다.***
 - [테스트 결과 링크](https://github.com/DongvinPark/StompServerInCpp/blob/main/PerformanceTestResult.md)
 
 ---
@@ -30,9 +27,11 @@
 ---
 
 ## 서버 아키텍처
-- 그림 추가할 것.
-  - 설명 추가 필요 1
-  - 섦여 추가 필요 2
+<img width="816" height="580" alt="스크린샷 2026-11-16 오후 3 46 11" src="https://github.com/user-attachments/assets/8d1bb66d-bd08-40b0-9183-47aaab7b2bd8" /><br/>
+- Message Broker 는 생성 & 초기화 완료된 STOMP Session 들의 포인터를 가지고 있습니다.
+  - 이때, 하나의 List에 pointer 들을 전부 저장하지 않고, N 개의 std::vector 에 나누어 저장합니다.
+- Msg 를 Fan-Out 해야 할 때, N 개의 스레드를 만들고, 각각의 스레드들이 Session Pointer 들이 저장된 std::vector를 하나씩 담당합니다.
+  - 1 개의 스레드는 1 개의 std::vector 안에 있는 Session Pointer 들을 순처적으로 접근하면서 Msg를 websocket write 합니다.
 
 ---
 
