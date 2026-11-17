@@ -38,10 +38,13 @@ Unit: ms
 
 ### Graphs
 - Average S -> C Latency
+  <br/>
   <img width="790" height="490" alt="Average S→C Latency" src="https://github.com/user-attachments/assets/59596abc-4fd4-45fa-8a69-70573f279872" />
 - S -> C Latency Standard Deviation
+  <br/>
   <img width="790" height="490" alt="Latency Standard Deviation" src="https://github.com/user-attachments/assets/1c0f5efe-63e9-4e80-8a0c-4f6a0a9c1bf5" />
 - P99 S -> C Latency
+  <br/>
   <img width="790" height="490" alt="P99 S→C Latency" src="https://github.com/user-attachments/assets/694ce092-18a7-4c81-95cd-04bb8286163f" />
 
 ### 2. Server TX Completion Latency(서버가 메시지 fan-out 완료에 걸린 시간)
