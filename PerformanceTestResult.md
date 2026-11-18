@@ -64,6 +64,30 @@ Unit: ms
 | 5,000 | 45.82 ms | 68.22 ms | **32.8%** |
 | 10,000 | 69.34 ms | 91.31 ms | **24.1%** |
 
+### 4. Heap Memory Trace Graphs
+#### Java / 2.5 K concurrent clients / measured by jconsole
+<img width="587" height="380" alt="heap-memory-singlethread-2 5K" src="https://github.com/user-attachments/assets/be65e231-fe96-46f2-8f58-ab5c3afbeb36" />
+<br/>
+
+#### C++ / 2.5 K concurrent clients / measured by valgrind
+<img width="734" height="752" alt="cpp-mem-2500" src="https://github.com/user-attachments/assets/1ba92d43-5b71-4d73-8201-19cfbebc0771" />
+<br/>
+
+#### Java / 5.0 K concurrent clients / measured by jconsole
+<img width="578" height="382" alt="jvm-heap-memory-singlethread-5k" src="https://github.com/user-attachments/assets/5ba07fab-a5c8-4dac-802b-20b424832be8" />
+<br/>
+
+#### C++ / 5.0 K concurrent clients / measured by valgrind
+<img width="739" height="636" alt="cpp-mem-5000" src="https://github.com/user-attachments/assets/8d4cf95b-8c48-4570-b253-133ceafefe9e" />
+<br/>
+
+#### Java / 10.0 K concurrent clients / measured by jconsole
+<img width="578" height="381" alt="stomp-singlethread-heap-memory" src="https://github.com/user-attachments/assets/41862cc3-f394-4850-afd2-6446631927bd" />
+<br/>
+
+#### C++ / 10.0 K concurrent clients / measured by valgrind
+<img width="737" height="618" alt="cpp-mem-10000" src="https://github.com/user-attachments/assets/e30a5a3c-5b4d-4109-a886-7301c742c0eb" />
+
 <br><br/>
 
 ## 테스트 결과 해석
